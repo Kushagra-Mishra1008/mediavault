@@ -21,11 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class LibraryService {
 
-    // Phase 1 has no auth yet - every request acts as this hardcoded user.
-    // MediavaultApplication seeds this user on startup (next file).
-    // Deleted entirely in Phase 2, replaced by the authenticated principal
-    // pulled from the JWT.
-    private static final Long HARDCODED_USER_ID = 1L;
+    // HARDCODED_USER_ID is gone. Every method below now takes a real
+    // userId parameter, sourced from the authenticated principal in the
+    // controller - the whole point of Phase 2.
 
     private final LibraryEntryRepository libraryEntryRepository;
     private final MediaItemRepository mediaItemRepository;
@@ -40,14 +38,14 @@ public class LibraryService {
     }
 
     @Transactional
-    public LibraryEntryResponse addToLibrary(LibraryEntryRequest request) {
-        User user = userRepository.findById(HARDCODED_USER_ID)
-            .orElseThrow(() -> new IllegalStateException("Hardcoded seed user missing - check startup seeding"));
+    public LibraryEntryResponse addToLibrary(Long userId, LibraryEntryRequest request) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new IllegalStateException("User not found"));
 
         MediaItem mediaItem = mediaItemRepository.findById(request.mediaItemId())
             .orElseThrow(() -> new IllegalArgumentException("Media item not found with id " + request.mediaItemId()));
 
-        libraryEntryRepository.findByUserIdAndMediaItemId(HARDCODED_USER_ID, mediaItem.getId())
+        libraryEntryRepository.findByUserIdAndMediaItemId(userId, mediaItem.getId())
             .ifPresent(existing -> {
                 throw new IllegalStateException("This media item is already in your library");
             });
@@ -58,9 +56,13 @@ public class LibraryService {
     }
 
     @Transactional
-    public LibraryEntryResponse updateLibraryEntry(Long id, LibraryEntryUpdateRequest request) {
+    public LibraryEntryResponse updateLibraryEntry(Long userId, Long id, LibraryEntryUpdateRequest request) {
         LibraryEntry entry = libraryEntryRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("Library entry not found with id " + id));
+
+        if (!entry.getUser().getId().equals(userId)) {
+            throw new IllegalArgumentException("Library entry not found with id " + id);
+        }
 
         if (request.status() != null) {
             entry.setStatus(request.status());
@@ -72,43 +74,38 @@ public class LibraryService {
             entry.setNotes(request.notes());
         }
 
-        // No explicit save() call needed - within an active @Transactional
-        // method, Hibernate tracks changes to a "managed" entity (loaded from
-        // the DB in this same transaction) and auto-flushes an UPDATE at the
-        // end of the method. This is called "dirty checking."
         return toResponse(entry);
     }
 
     @Transactional
-    public void deleteLibraryEntry(Long id) {
-        if (!libraryEntryRepository.existsById(id)) {
+    public void deleteLibraryEntry(Long userId, Long id) {
+        LibraryEntry entry = libraryEntryRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("Library entry not found with id " + id));
+
+        if (!entry.getUser().getId().equals(userId)) {
             throw new IllegalArgumentException("Library entry not found with id " + id);
         }
+
         libraryEntryRepository.deleteById(id);
     }
 
     @Transactional(readOnly = true)
-    public Page<LibraryEntryResponse> listLibraryEntries(LibraryStatus status, MediaType type, Pageable pageable) {
+    public Page<LibraryEntryResponse> listLibraryEntries(Long userId, LibraryStatus status, MediaType type, Pageable pageable) {
         Page<LibraryEntry> page;
 
         if (status != null && type != null) {
-            page = libraryEntryRepository.findByUserIdAndStatusAndMediaItemType(HARDCODED_USER_ID, status, type, pageable);
+            page = libraryEntryRepository.findByUserIdAndStatusAndMediaItemType(userId, status, type, pageable);
         } else if (status != null) {
-            page = libraryEntryRepository.findByUserIdAndStatus(HARDCODED_USER_ID, status, pageable);
+            page = libraryEntryRepository.findByUserIdAndStatus(userId, status, pageable);
         } else if (type != null) {
-            page = libraryEntryRepository.findByUserIdAndMediaItemType(HARDCODED_USER_ID, type, pageable);
+            page = libraryEntryRepository.findByUserIdAndMediaItemType(userId, type, pageable);
         } else {
-            page = libraryEntryRepository.findByUserId(HARDCODED_USER_ID, pageable);
+            page = libraryEntryRepository.findByUserId(userId, pageable);
         }
 
         return page.map(this::toResponse);
     }
 
-    // Called WHILE the @Transactional method is still running, so
-    // entry.getMediaItem() safely triggers its LAZY fetch here - the
-    // session is still open. Doing this conversion in the controller
-    // instead would throw LazyInitializationException, since the
-    // transaction closes when the service method returns.
     private LibraryEntryResponse toResponse(LibraryEntry entry) {
         MediaItem mi = entry.getMediaItem();
         MediaItemResponse mediaItemResponse = new MediaItemResponse(
