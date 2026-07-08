@@ -4,6 +4,7 @@ package com.kushagra.mediavault.service;
 import com.kushagra.mediavault.dto.LibraryEntryRequest;
 import com.kushagra.mediavault.dto.LibraryEntryResponse;
 import com.kushagra.mediavault.dto.LibraryEntryUpdateRequest;
+import com.kushagra.mediavault.dto.LibraryStatsResponse;
 import com.kushagra.mediavault.dto.MediaItemResponse;
 import com.kushagra.mediavault.entity.LibraryEntry;
 import com.kushagra.mediavault.entity.LibraryStatus;
@@ -18,12 +19,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.EnumMap;
+import java.util.Map;
+
 @Service
 public class LibraryService {
-
-    // HARDCODED_USER_ID is gone. Every method below now takes a real
-    // userId parameter, sourced from the authenticated principal in the
-    // controller - the whole point of Phase 2.
 
     private final LibraryEntryRepository libraryEntryRepository;
     private final MediaItemRepository mediaItemRepository;
@@ -104,6 +104,31 @@ public class LibraryService {
         }
 
         return page.map(this::toResponse);
+    }
+
+    // New Phase 3 method. Calls all three aggregation queries and
+    // assembles them into one response object.
+    @Transactional(readOnly = true)
+    public LibraryStatsResponse getStats(Long userId) {
+        long total = libraryEntryRepository.countByUserId(userId);
+
+        // EnumMap - a Map implementation specifically optimized for enum
+        // keys (internally just an array indexed by the enum's ordinal,
+        // faster and more memory-efficient than a HashMap here). Good
+        // default choice whenever your map's key type is an enum.
+        Map<LibraryStatus, Long> byStatus = new EnumMap<>(LibraryStatus.class);
+        for (Object[] row : libraryEntryRepository.countByStatusGrouped(userId)) {
+            byStatus.put((LibraryStatus) row[0], (Long) row[1]);
+        }
+
+        Map<MediaType, Long> byType = new EnumMap<>(MediaType.class);
+        for (Object[] row : libraryEntryRepository.countByTypeGrouped(userId)) {
+            byType.put((MediaType) row[0], (Long) row[1]);
+        }
+
+        Double avgRating = libraryEntryRepository.findAverageRating(userId);
+
+        return new LibraryStatsResponse(total, byStatus, byType, avgRating);
     }
 
     private LibraryEntryResponse toResponse(LibraryEntry entry) {

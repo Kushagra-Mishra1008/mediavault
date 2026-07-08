@@ -4,6 +4,7 @@ package com.kushagra.mediavault.controller;
 import com.kushagra.mediavault.dto.LibraryEntryRequest;
 import com.kushagra.mediavault.dto.LibraryEntryResponse;
 import com.kushagra.mediavault.dto.LibraryEntryUpdateRequest;
+import com.kushagra.mediavault.dto.LibraryStatsResponse;
 import com.kushagra.mediavault.entity.LibraryStatus;
 import com.kushagra.mediavault.entity.MediaType;
 import com.kushagra.mediavault.entity.User;
@@ -17,7 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/library")
+@RequestMapping("/api")
 public class LibraryController {
 
     private final LibraryService libraryService;
@@ -26,13 +27,7 @@ public class LibraryController {
         this.libraryService = libraryService;
     }
 
-    // @AuthenticationPrincipal User user - Spring Security injects the
-    // currently authenticated User directly as a method parameter. This
-    // is only possible because User implements UserDetails and JwtFilter
-    // already put it into the SecurityContext for this request - by the
-    // time this method runs, Spring's already done the lookup, we're just
-    // grabbing the result.
-    @PostMapping
+    @PostMapping("/library")
     public ResponseEntity<LibraryEntryResponse> addToLibrary(
             @AuthenticationPrincipal User user,
             @Valid @RequestBody LibraryEntryRequest request) {
@@ -40,7 +35,7 @@ public class LibraryController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping("/library/{id}")
     public ResponseEntity<LibraryEntryResponse> updateLibraryEntry(
             @AuthenticationPrincipal User user,
             @PathVariable Long id,
@@ -48,7 +43,7 @@ public class LibraryController {
         return ResponseEntity.ok(libraryService.updateLibraryEntry(user.getId(), id, request));
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/library/{id}")
     public ResponseEntity<Void> deleteLibraryEntry(
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
@@ -56,12 +51,22 @@ public class LibraryController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping
+    @GetMapping("/library")
     public ResponseEntity<Page<LibraryEntryResponse>> listLibraryEntries(
             @AuthenticationPrincipal User user,
             @RequestParam(required = false) LibraryStatus status,
             @RequestParam(required = false) MediaType type,
             Pageable pageable) {
         return ResponseEntity.ok(libraryService.listLibraryEntries(user.getId(), status, type, pageable));
+    }
+
+    // New Phase 3 endpoint. Sits at /api/stats, not /api/library/stats -
+    // that's why @RequestMapping moved up to just "/api" at the class
+    // level, with each method now spelling out its own full sub-path
+    // (/library, /library/{id}, /stats) instead of inheriting a shared
+    // /api/library prefix. Small structural change, worth noticing.
+    @GetMapping("/stats")
+    public ResponseEntity<LibraryStatsResponse> getStats(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(libraryService.getStats(user.getId()));
     }
 }
