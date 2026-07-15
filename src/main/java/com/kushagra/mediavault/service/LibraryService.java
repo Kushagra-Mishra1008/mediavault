@@ -106,16 +106,10 @@ public class LibraryService {
         return page.map(this::toResponse);
     }
 
-    // New Phase 3 method. Calls all three aggregation queries and
-    // assembles them into one response object.
     @Transactional(readOnly = true)
     public LibraryStatsResponse getStats(Long userId) {
         long total = libraryEntryRepository.countByUserId(userId);
 
-        // EnumMap - a Map implementation specifically optimized for enum
-        // keys (internally just an array indexed by the enum's ordinal,
-        // faster and more memory-efficient than a HashMap here). Good
-        // default choice whenever your map's key type is an enum.
         Map<LibraryStatus, Long> byStatus = new EnumMap<>(LibraryStatus.class);
         for (Object[] row : libraryEntryRepository.countByStatusGrouped(userId)) {
             byStatus.put((LibraryStatus) row[0], (Long) row[1]);
@@ -140,6 +134,7 @@ public class LibraryService {
             mi.getGenre(),
             mi.getReleaseYear(),
             mi.getDescription(),
+            mi.getImageUrl(),
             mi.getCreatedAt()
         );
 

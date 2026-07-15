@@ -1,0 +1,54 @@
+/* Tailwind's core styles - resets, base typography, and every utility
+   class (bg-*, flex, p-4, etc) all come from this one import in v4.
+   Order matters: this must come before your own rules. */
+@import "tailwindcss";
+
+/* Google Fonts - three faces for three jobs, per the card-catalog plan:
+   Bebas Neue = titles, Source Sans 3 = body copy, JetBrains Mono =
+   metadata (ratings, dates) - the "stamped receipt" feel for numbers.
+   Swapped Source Sans 3 in for Inter to match the Stitch mockups. */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* @theme is Tailwind v4's config mechanism - a plain CSS block instead
+   of a JS file. Anything named --color-X here generates bg-X/text-X/
+   border-X utilities automatically. Same idea for --font-X generating
+   font-X utilities. This is the ONLY place the palette/fonts live -
+   change a hex here and every component using bg-movie updates. */
+@theme {
+  /* Base palette */
+  --color-paper: #F7F3EA;
+  --color-ink: #1B2432;
+
+  /* Genre accents - act like stickers on a physical case. Confirmed
+     against the Stitch mockups - movie/ink hex values matched exactly. */
+  --color-movie: #D97706;
+  --color-series: #0D9488;
+  --color-anime: #DB2777;
+  --color-game: #7C3AED;
+
+  /* New - the ink-stamp motif (COMPLETED stamps, date stamps) recurs
+     across nearly every mockup screen. Placeholder red, adjust once we
+     see it rendered for real. */
+  --color-stamp: #B91C1C;
+
+  /* Overriding Tailwind's built-in font-sans and font-mono utilities
+     directly, rather than inventing new names, so every default text
+     element (which already uses font-sans as its base) picks these up
+     with zero extra classes needed. */
+  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Display is genuinely new - no Tailwind default to override - so
+     this one DOES need an explicit font-display class wherever you
+     use it (card titles, headers). */
+  --font-display: "Bebas Neue", sans-serif;
+}
+
+/* @layer base = Tailwind's spot for global element defaults, applied
+   before any utility classes, so utilities can still override them
+   per-element without a specificity fight. */
+@layer base {
+  body {
+    @apply bg-paper text-ink font-sans;
+  }
+}

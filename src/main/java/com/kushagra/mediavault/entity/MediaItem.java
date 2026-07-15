@@ -26,6 +26,12 @@ public class MediaItem {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    // No @Column(nullable = false) here on purpose - a poster lookup can
+    // legitimately fail (title not found, provider down, rate limited),
+    // and that should never block the media item itself from being
+    // saved. Null just means "no poster art available."
+    private String imageUrl;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -83,6 +89,18 @@ public class MediaItem {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    // Set by MediaService AFTER construction, once PosterService has
+    // resolved (or failed to resolve) a poster URL - not part of the
+    // constructor since it's derived data, not something the user
+    // submits in MediaItemRequest.
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 
     public LocalDateTime getCreatedAt() {

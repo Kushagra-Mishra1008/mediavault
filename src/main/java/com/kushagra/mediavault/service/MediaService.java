@@ -11,20 +11,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-// @Service marks this as a Spring-managed bean - component scanning finds
-// it at startup, Spring creates one instance (singleton by default) and
-// injects it wherever it's needed.
 @Service
 public class MediaService {
 
     private final MediaItemRepository mediaItemRepository;
+    private final PosterService posterService;
 
-    // Constructor injection: Spring sees this constructor needs a
-    // MediaItemRepository, and automatically passes in the proxy bean
-    // Spring Data generated for that interface at startup. No @Autowired
-    // needed here since there's only one constructor - Spring infers it.
-    public MediaService(MediaItemRepository mediaItemRepository) {
+    public MediaService(MediaItemRepository mediaItemRepository, PosterService posterService) {
         this.mediaItemRepository = mediaItemRepository;
+        this.posterService = posterService;
     }
 
     @Transactional
@@ -36,6 +31,14 @@ public class MediaService {
             request.releaseYear(),
             request.description()
         );
+
+        // Called BEFORE save() so the poster URL is part of the same
+        // INSERT, not a separate UPDATE afterward. If this call fails,
+        // PosterService already caught it internally and returned null -
+        // setImageUrl(null) is harmless, the item just saves without art.
+        String imageUrl = posterService.fetchPosterUrl(request.title(), request.type());
+        item.setImageUrl(imageUrl);
+
         MediaItem saved = mediaItemRepository.save(item);
         return toResponse(saved);
     }
@@ -47,9 +50,6 @@ public class MediaService {
         return toResponse(item);
     }
 
-    // readOnly = true is a hint to Hibernate that no writes happen in this
-    // method, letting it skip some internal dirty-checking overhead. Good
-    // practice on every read-only service method.
     @Transactional(readOnly = true)
     public Page<MediaItemResponse> listMediaItems(MediaType type, String genre, String search, Pageable pageable) {
         Page<MediaItem> page;
@@ -64,9 +64,6 @@ public class MediaService {
             page = mediaItemRepository.findAll(pageable);
         }
 
-        // Page.map() converts each MediaItem inside the page to a
-        // MediaItemResponse, preserving the pagination metadata (total
-        // pages, total elements, etc).
         return page.map(this::toResponse);
     }
 
@@ -78,6 +75,7 @@ public class MediaService {
             item.getGenre(),
             item.getReleaseYear(),
             item.getDescription(),
+            item.getImageUrl(),
             item.getCreatedAt()
         );
     }
