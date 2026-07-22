@@ -2,7 +2,7 @@
 // silently forwards anything starting with /api to localhost:8080 during
 // dev. In production this'll need to point at wherever the backend is
 // actually deployed - we'll handle that with an env variable in Phase 5.
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 const TOKEN_KEY = 'mediavault_token';
 
