@@ -2,6 +2,7 @@
 package com.kushagra.mediavault.config;
 
 import com.kushagra.mediavault.security.JwtFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -13,74 +14,77 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-// @Configuration: tells Spring "this class defines beans via @Bean methods,
-// scan it at startup." Different from @Service/@Component - those mark the
-// class ITSELF as a bean; @Configuration marks it as a factory for beans
-// built from other (often third-party) classes.
+import java.util.List;
+
 @Configuration
 public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
 
+    // Same ${VAR:default} pattern as application.properties - locally this
+    // is just your Vite dev server (localhost:5173), so nothing changes
+    // for local development. In Render's dashboard, we'll set this to your
+    // real deployed frontend URL once you know it. Comma-separated so both
+    // your local dev URL AND the production frontend URL can be allowed at
+    // once, if you ever want to test against the live backend from your
+    // local machine.
+    @Value("${cors.allowed-origins:http://localhost:5173}")
+    private String allowedOrigins;
+
     public SecurityConfig(JwtFilter jwtFilter) {
         this.jwtFilter = jwtFilter;
     }
 
-    // PasswordEncoder bean: BCrypt is the industry-standard password
-    // hashing algorithm - slow-by-design (computationally expensive) so
-    // brute-forcing leaked hashes is impractical, and it auto-salts each
-    // hash so two users with the same password get different hashes.
-    // AuthService will inject this bean to hash passwords on register and
-    // verify them on login.
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // AuthenticationManager is Security's core interface for "attempt to
-    // authenticate these credentials." We expose it as a bean here so
-    // AuthService can inject it and call .authenticate() during login -
-    // it internally uses your CustomUserDetailsService + PasswordEncoder
-    // to actually check the submitted password against the stored hash.
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 
-    // This is the main event - defines the actual filter chain and route
-    // rules. Spring calls this once at startup and uses the returned
-    // SecurityFilterChain for every request from then on.
+    // CORS = Cross-Origin Resource Sharing. Browsers block JavaScript from
+    // one origin (protocol+domain+port) from calling an API on a DIFFERENT
+    // origin, unless that API explicitly says "this origin is allowed" via
+    // response headers. In dev, Vite's proxy made your frontend and backend
+    // LOOK same-origin to the browser (see vite.config.js's server.proxy),
+    // so this was never an issue. In production, your frontend (e.g. a
+    // Vercel URL) and backend (a Render URL) are genuinely different
+    // origins - without this bean, every fetch() call from the deployed
+    // frontend would be silently blocked by the browser, even though the
+    // backend itself would have handled the request fine.
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of(allowedOrigins.split(",")));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+        // Authorization is the header your JWT rides in on every request
+        // (see JwtFilter) - without explicitly allowing it here, the
+        // browser's CORS preflight would strip it or block the request.
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            // Stateless JWT API - CSRF protection is a cookie/session-based
-            // browser attack mitigation and doesn't apply here the same
-            // way. Disabling it is standard for token-based APIs, not a
-            // security shortcut.
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
-
-            // Never create or use an HTTP session. Every request re-proves
-            // identity via its JWT - no "remember this login" server-side
-            // state at all.
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-            // Route-level rules, evaluated top to bottom, first match wins.
             .authorizeHttpRequests(auth -> auth
-                // Registration/login must be reachable WITHOUT a token -
-                // otherwise nobody could ever get their first token.
                 .requestMatchers("/api/auth/**").permitAll()
-                // Everything else requires a valid, authenticated request.
                 .anyRequest().authenticated()
             )
-
-            // Insert our custom filter INTO Spring Security's existing
-            // chain, specifically positioned to run BEFORE Security's own
-            // built-in username/password filter. This ordering matters:
-            // we want to have already set the SecurityContext (if a valid
-            // JWT was present) before Security's later authorization check
-            // (.anyRequest().authenticated() above) evaluates the request.
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
