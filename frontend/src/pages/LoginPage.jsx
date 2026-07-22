@@ -1,9 +1,68 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
+
+function CursorTrail() {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let animationId;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function handleMove(e) {
+      for (let i = 0; i < 2; i++) {
+        particles.push({
+          x: e.clientX,
+          y: e.clientY,
+          size: Math.random() * 4 + 1,
+          speedX: Math.random() * 3 - 1.5,
+          speedY: Math.random() * 3 - 1.5,
+          life: 1,
+        });
+      }
+    }
+    window.addEventListener('mousemove', handleMove);
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach((p) => {
+        p.x += p.speedX;
+        p.y += p.speedY;
+        p.life -= 0.05;
+        ctx.fillStyle = `rgba(227, 0, 43, ${p.life})`;
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+      });
+      particles = particles.filter((p) => p.life > 0);
+      animationId = requestAnimationFrame(animate);
+    }
+    animate();
+
+    return () => {
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('mousemove', handleMove);
+      cancelAnimationFrame(animationId);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 pointer-events-none z-50 opacity-50"
+    />
+  );
+}
 
 export default function LoginPage() {
   const { login, register } = useAuth();
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [mode, setMode] = useState('login');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -11,8 +70,6 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e) {
-    // Forms POST and reload the page by default - preventDefault stops
-    // that so React stays in control of what happens next.
     e.preventDefault();
     setError(null);
     setSubmitting(true);
@@ -22,12 +79,7 @@ export default function LoginPage() {
       } else {
         await register(username, email, password);
       }
-      // No navigation call here on purpose - once App.jsx checks
-      // isAuthenticated (next file), a successful login/register will
-      // just cause the whole app to re-render into the logged-in view.
     } catch (err) {
-      // err.message here is exactly what GlobalExceptionHandler sent -
-      // "Invalid username or password", "Email already registered", etc.
       setError(err.message);
     } finally {
       setSubmitting(false);
@@ -35,112 +87,152 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-paper px-4">
-      <div className="relative w-full max-w-md bg-white border border-ink/10 p-8">
+    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
+      <CursorTrail />
 
-        <div className="flex items-start justify-between mb-8">
-          <div>
-            <h1 className="font-display text-4xl tracking-wide text-ink">MEDIAVAULT</h1>
-            <p className="font-mono text-xs text-ink/50 mt-1">
-              ACCESSION NO. MV-2024-{mode === 'login' ? 'LOGIN' : 'REGISTER'}
-            </p>
-          </div>
-          <span className="font-mono text-[10px] uppercase tracking-wider bg-ink text-paper px-2 py-1 whitespace-nowrap">
-            Secure Archive
-          </span>
-        </div>
+      <div className="absolute top-0 left-0 w-64 h-64 halftone-bg pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-96 h-96 halftone-bg pointer-events-none" />
 
-        <p className="font-mono text-xs text-ink/50 mb-6">
-          BORROWER STATUS: <span className="text-stamp font-semibold">UNAUTHORIZED</span>
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block font-mono text-[11px] uppercase tracking-wider text-ink/60 mb-1">
-              Archive Member ID
-            </label>
-            <input
-              type="text"
-              required
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="e.g. curator_01"
-              className="w-full border-b border-ink/30 bg-transparent py-2 font-sans text-ink placeholder:text-ink/30 focus:outline-none focus:border-ink"
-            />
-          </div>
-
-          {mode === 'register' && (
-            <div>
-              <label className="block font-mono text-[11px] uppercase tracking-wider text-ink/60 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="e.g. curator@example.com"
-                className="w-full border-b border-ink/30 bg-transparent py-2 font-sans text-ink placeholder:text-ink/30 focus:outline-none focus:border-ink"
-              />
-            </div>
-          )}
-
-          <div>
-            <label className="block font-mono text-[11px] uppercase tracking-wider text-ink/60 mb-1">
-              Secure Clearance Key
-            </label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full border-b border-ink/30 bg-transparent py-2 font-sans text-ink placeholder:text-ink/30 focus:outline-none focus:border-ink"
-            />
-          </div>
-
-          {error && (
-            <p className="text-sm text-stamp font-medium">{error}</p>
-          )}
-
-          {mode === 'login' && (
-            <label className="flex items-center gap-2 text-sm text-ink/60">
-              <input type="checkbox" className="accent-ink" />
-              Stay signed in for 30 days
-            </label>
-          )}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full bg-ink text-paper font-mono text-xs uppercase tracking-wider py-3 hover:bg-ink/90 disabled:opacity-50 transition"
-          >
-            {submitting
-              ? 'Processing...'
-              : mode === 'login' ? 'Authorize Entry →' : 'Create Archive Account →'}
-          </button>
-        </form>
-
-        <button
-          type="button"
-          onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(null); }}
-          className="block mx-auto mt-6 text-sm text-ink/50 hover:text-ink underline underline-offset-2"
-        >
-          {mode === 'login' ? 'Need an account? Register' : 'Already registered? Login'}
-        </button>
-
-        {mode === 'login' && (
-          <p className="text-center mt-2 text-xs text-ink/30 cursor-not-allowed" title="Not implemented yet">
-            Lost your vault key?
-          </p>
-        )}
-
-        {/* Decorative ink stamp - purely visual, matches the mockup's
-            rotated date-stamp flourish */}
-        <div className="absolute -bottom-4 -right-4 border-2 border-stamp text-stamp font-mono text-[10px] px-3 py-1 rotate-[-8deg] opacity-70 select-none">
-          DATE: --/--/--
-        </div>
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[400px] bg-primary -rotate-[15deg] opacity-90 shadow-[0_0_100px_rgba(227,0,43,0.3)]" />
       </div>
+
+      <main className="relative z-10 w-full max-w-5xl px-8 flex flex-col md:flex-row items-center gap-12">
+
+        <div className="flex-1 text-center md:text-left">
+          <div className="inline-block bg-primary text-white px-6 py-2 -rotate-3 mb-4">
+            <span className="font-mono text-xs tracking-widest uppercase">
+              System Protocol: Active
+            </span>
+          </div>
+          <h1 className="font-display text-6xl md:text-8xl italic font-black text-white tracking-tighter uppercase leading-none mb-6">
+            MEDIA<br />
+            <span className="text-primary bg-white px-4 inline-block">VAULT</span>
+          </h1>
+          <p className="font-sans text-lg text-on-surface-variant max-w-md mx-auto md:mx-0 opacity-80 border-l-4 border-primary pl-6">
+            The definitive archive for digital defiance. Catalog your collection. Secure the data.
+          </p>
+        </div>
+
+        <div className="w-full max-w-md relative group">
+          <div className="absolute inset-0 bg-primary translate-x-4 translate-y-4 -skew-x-3 transition-transform group-hover:translate-x-6 group-hover:translate-y-6" />
+
+          <div className="relative bg-surface p-8 md:p-12 -skew-x-3 border-2 border-white/10 shadow-2xl">
+            <div className="skew-x-3">
+
+              <div className="flex gap-4 mb-10 border-b-2 border-white/5 pb-4">
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setError(null); }}
+                  className={`font-display text-2xl font-black uppercase tracking-tight transition-all hover:translate-x-1 ${
+                    mode === 'login' ? 'text-primary' : 'text-on-surface-variant/40 hover:text-white'
+                  }`}
+                >
+                  LOGIN
+                </button>
+                <span className="text-white/20 font-black text-2xl">/</span>
+                <button
+                  type="button"
+                  onClick={() => { setMode('register'); setError(null); }}
+                  className={`font-display text-2xl font-black uppercase tracking-tight transition-all hover:translate-x-1 ${
+                    mode === 'register' ? 'text-primary' : 'text-on-surface-variant/40 hover:text-white'
+                  }`}
+                >
+                  REGISTER
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-8">
+                <div className="relative group/field">
+                  <label className="block font-mono text-xs text-primary uppercase mb-2">
+                    User Identity
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="OPERATIVE_ID"
+                    className="w-full bg-transparent border-b-4 border-white/20 py-3 px-4 text-white font-sans focus:outline-none focus:border-primary focus:bg-primary/5 transition-all placeholder:text-white/10"
+                  />
+                </div>
+
+                {mode === 'register' && (
+                  <div className="relative group/field">
+                    <label className="block font-mono text-xs text-primary uppercase mb-2">
+                      Contact Frequency
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="EMAIL_ADDRESS"
+                      className="w-full bg-transparent border-b-4 border-white/20 py-3 px-4 text-white font-sans focus:outline-none focus:border-primary focus:bg-primary/5 transition-all placeholder:text-white/10"
+                    />
+                  </div>
+                )}
+
+                <div className="relative group/field">
+                  <label className="block font-mono text-xs text-primary uppercase mb-2">
+                    Security Cipher
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-transparent border-b-4 border-white/20 py-3 px-4 text-white font-sans focus:outline-none focus:border-primary focus:bg-primary/5 transition-all placeholder:text-white/10"
+                  />
+                </div>
+
+                {error && (
+                  <p className="font-mono text-sm text-primary uppercase">{error}</p>
+                )}
+
+                <div className="pt-4 space-y-4">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full bg-primary text-white py-5 px-8 font-display text-2xl font-black uppercase tracking-widest flex justify-between items-center jitter-on-hover transition-all disabled:opacity-50"
+                  >
+                    <span>
+                      {submitting
+                        ? 'Processing...'
+                        : mode === 'login' ? 'Initialize Access' : 'Create Profile'}
+                    </span>
+                    <span>→</span>
+                  </button>
+
+                  {mode === 'login' && (
+                    <div className="flex justify-between items-center font-mono text-xs uppercase opacity-60">
+                      <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
+                        <input type="checkbox" className="rounded-none bg-transparent border-2 border-white/20 text-primary" />
+                        PERSIST SESSION
+                      </label>
+                      <span className="opacity-40 cursor-not-allowed" title="Not implemented yet">
+                        Lost Protocol?
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <footer className="fixed bottom-0 left-0 w-full p-6 flex justify-between items-end pointer-events-none">
+        <div className="font-mono text-[10px] space-y-1 opacity-20 hidden md:block text-on-background">
+          <div>ENCRYPTED SESSION LAYER</div>
+          <div>MEDIAVAULT v1.0</div>
+        </div>
+        <div className="bg-primary text-white px-4 py-1 font-mono text-xs flex items-center gap-2 pointer-events-auto">
+          <span>🛡</span>
+          ENCRYPTED CONNECTION ESTABLISHED
+        </div>
+      </footer>
     </div>
   );
 }

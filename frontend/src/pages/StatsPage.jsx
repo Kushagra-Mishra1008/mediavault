@@ -6,6 +6,8 @@ const STATUS_LABELS = {
   IN_PROGRESS: 'In Progress',
   COMPLETED: 'Completed',
   DROPPED: 'Dropped',
+  WISHLIST: 'Wishlist',
+  ON_HOLD: 'On Hold',
 };
 
 const TYPE_COLORS = {
@@ -13,6 +15,7 @@ const TYPE_COLORS = {
   SERIES: 'bg-series',
   ANIME: 'bg-anime',
   GAME: 'bg-game',
+  MANGA: 'bg-manga',
 };
 
 export default function StatsPage() {
@@ -24,17 +27,11 @@ export default function StatsPage() {
   useEffect(() => {
     async function loadStats() {
       try {
-        // Two independent requests, fetched in parallel with
-        // Promise.all rather than one after another - they don't depend
-        // on each other's results, so there's no reason to make the
-        // user wait for both round-trips sequentially.
         const [statsData, recentData] = await Promise.all([
           apiGet('/stats'),
           apiGet('/library?size=1&sort=addedAt,desc'),
         ]);
         setStats(statsData);
-        // .content[0] may not exist if the library is completely empty -
-        // handled with ?. below rather than assuming it's always there.
         setRecentEntry(recentData.content[0] ?? null);
       } catch (err) {
         setError(err.message);
@@ -46,18 +43,14 @@ export default function StatsPage() {
   }, []);
 
   if (loading) {
-    return <p className="font-mono text-sm text-ink/50">Loading statistics...</p>;
+    return <p className="font-mono text-sm text-on-background/50 uppercase">Loading readout...</p>;
   }
 
   if (error) {
-    return <p className="font-mono text-sm text-stamp">{error}</p>;
+    return <p className="font-mono text-sm text-primary uppercase">{error}</p>;
   }
 
-  // byType/byStatus only contain keys that actually have entries (see
-  // the GROUP BY comment in LibraryEntryRepository) - defaulting to 0
-  // here means every type/status always renders a row, even at zero,
-  // rather than the breakdown silently shrinking as categories empty out.
-  const typeEntries = ['MOVIE', 'SERIES', 'ANIME', 'GAME'].map((type) => ({
+  const typeEntries = ['MOVIE', 'SERIES', 'ANIME', 'GAME', 'MANGA'].map((type) => ({
     type,
     count: stats.byType[type] ?? 0,
   }));
@@ -68,72 +61,70 @@ export default function StatsPage() {
     count: stats.byStatus[status] ?? 0,
   }));
 
-  // Mockup shows a 5-star scale next to the /10 number - averageRating
-  // is on a 1-10 scale, so /2 converts to a 5-star equivalent for the
-  // filled-star count.
-  const filledStars = stats.averageRating ? Math.round(stats.averageRating / 2) : 0;
+  // byGenre is a LinkedHashMap on the backend, already ordered highest
+  // count first (see the ORDER BY in countByGenreGrouped) - Object.entries
+  // preserves that same order for a plain JS object, so no re-sorting
+  // needed here, just capping the display at the top 5 so this doesn't
+  // grow unbounded as genres accumulate.
+  const genreEntries = Object.entries(stats.byGenre ?? {}).slice(0, 5);
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="font-display text-3xl text-ink tracking-wide">LIBRARY STATISTICS</h2>
-        <p className="font-mono text-xs text-ink/40 mt-1">
-          Detailed breakdown of your curated collection.
+      <div className="mb-10">
+        <h2 className="font-display text-4xl font-black italic text-white uppercase">
+          Consumption_Metrics
+        </h2>
+        <p className="font-mono text-xs text-on-background/40 mt-1 uppercase">
+          Full breakdown of archived assets.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-        {/* Catalog Total */}
-        <div className="bg-white border-2 border-ink/10 p-5">
-          <span className="inline-block bg-ink text-paper font-mono text-[10px] uppercase px-2 py-0.5 mb-3">
-            Summary
-          </span>
-          <p className="font-display text-5xl text-ink">{stats.totalEntries}</p>
-          <p className="font-mono text-xs text-ink/50 mt-2">
-            Individual media items tracked in private storage.
-          </p>
+        {/* Total Records */}
+        <div className="bg-surface border-l-8 border-primary p-6 relative overflow-hidden">
+          <p className="font-mono text-xs text-primary mb-2 uppercase">// Total_Records</p>
+          <h3 className="font-display text-6xl leading-none font-black text-white">
+            {stats.totalEntries}
+          </h3>
         </div>
 
-        {/* Critical Score */}
-        <div className="bg-white border-2 border-ink/10 p-5">
-          <span className="inline-block bg-movie text-white font-mono text-[10px] uppercase px-2 py-0.5 mb-3">
-            Quality
-          </span>
+        {/* Average Rating */}
+        <div className="bg-surface border-l-8 border-primary p-6">
+          <p className="font-mono text-xs text-primary mb-2 uppercase">// Avg_Rating</p>
           {stats.averageRating ? (
-            <>
-              <div className="flex gap-0.5 mb-1">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <span key={i} className={i <= filledStars ? 'text-movie' : 'text-ink/15'}>
-                    ★
-                  </span>
-                ))}
-              </div>
-              <p className="font-display text-3xl text-ink">
-                {stats.averageRating.toFixed(1)}<span className="text-lg text-ink/40">/10</span>
-              </p>
-            </>
+            <div className="flex items-baseline gap-2">
+              <span className="font-display text-6xl leading-none font-black text-white">
+                {stats.averageRating.toFixed(1)}
+              </span>
+              <span className="font-mono text-on-background/40">/10</span>
+            </div>
           ) : (
-            <p className="font-mono text-sm text-ink/40 mt-2">No ratings yet</p>
+            <p className="font-mono text-sm text-on-background/30 uppercase mt-2">No ratings yet</p>
           )}
-          <p className="font-mono text-xs text-ink/50 mt-2">Weighted curator average.</p>
+        </div>
+
+        {/* Top Genre */}
+        <div className="bg-primary p-6">
+          <p className="font-mono text-xs text-white/70 mb-2 uppercase">// Top_Genre</p>
+          <h3 className="font-display text-3xl font-black italic text-white uppercase truncate">
+            {stats.topGenre ?? 'N/A'}
+          </h3>
         </div>
 
         {/* Type Breakdown */}
-        <div className="bg-white border-2 border-ink/10 p-5">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-ink/50 mb-3">
-            Type Breakdown
-          </p>
-          <div className="space-y-2">
+        <div className="bg-surface p-6 md:col-span-2">
+          <p className="font-mono text-xs text-primary mb-4 uppercase">// Type_Distribution</p>
+          <div className="space-y-3">
             {typeEntries.map(({ type, count }) => {
               const pct = stats.totalEntries > 0 ? Math.round((count / stats.totalEntries) * 100) : 0;
               return (
                 <div key={type}>
-                  <div className="flex justify-between font-mono text-xs text-ink/60 mb-0.5">
+                  <div className="flex justify-between font-mono text-xs text-on-background/60 mb-1 uppercase">
                     <span>{type}</span>
-                    <span>{pct}%</span>
+                    <span>{count} · {pct}%</span>
                   </div>
-                  <div className="h-1.5 bg-ink/5 w-full">
+                  <div className="h-2 bg-surface-high w-full overflow-hidden">
                     <div className={`h-full ${TYPE_COLORS[type]}`} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
@@ -142,30 +133,12 @@ export default function StatsPage() {
           </div>
         </div>
 
-        {/* Status Breakdown - replaces the mockup's Verified
-            Viewings/Queue Depth boxes with real, honestly-labeled data */}
-        <div className="bg-white border-2 border-ink/10 p-5 md:col-span-2">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-ink/50 mb-4">
-            Status Breakdown
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {statusEntries.map(({ status, label, count }) => (
-              <div key={status}>
-                <p className="font-display text-3xl text-ink">{count}</p>
-                <p className="font-mono text-xs text-ink/50 mt-1">{label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Recently Added */}
-        <div className="bg-white border-2 border-ink/10 p-5">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-ink/50 mb-3">
-            Recently Added
-          </p>
+        <div className="bg-surface p-6">
+          <p className="font-mono text-xs text-primary mb-4 uppercase">// Recent_Upload</p>
           {recentEntry ? (
-            <div className="flex gap-3">
-              <div className="w-16 h-24 bg-ink/5 flex-shrink-0 overflow-hidden">
+            <div className="flex gap-4">
+              <div className="w-16 h-24 bg-surface-high flex-shrink-0 overflow-hidden grayscale">
                 {recentEntry.mediaItem.imageUrl && (
                   <img
                     src={recentEntry.mediaItem.imageUrl}
@@ -175,18 +148,50 @@ export default function StatsPage() {
                 )}
               </div>
               <div>
-                <p className="font-display text-lg text-ink leading-tight">
+                <p className="font-display text-lg font-black text-white leading-tight uppercase">
                   {recentEntry.mediaItem.title}
                 </p>
-                <p className="font-mono text-xs text-ink/40 mt-1">
+                <p className="font-mono text-xs text-on-background/40 mt-1 uppercase">
                   {recentEntry.mediaItem.type}
                 </p>
               </div>
             </div>
           ) : (
-            <p className="font-mono text-xs text-ink/40">Nothing added yet.</p>
+            <p className="font-mono text-xs text-on-background/30 uppercase">Nothing archived yet.</p>
           )}
         </div>
+
+        {/* Status Breakdown - all 6 real statuses now */}
+        <div className="bg-surface p-6 md:col-span-3">
+          <p className="font-mono text-xs text-primary mb-4 uppercase">// Status_Breakdown</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6">
+            {statusEntries.map(({ status, label, count }) => (
+              <div key={status}>
+                <p className="font-display text-4xl font-black text-white">{count}</p>
+                <p className="font-mono text-[10px] text-on-background/50 mt-1 uppercase">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Genre Breakdown - new, backed by the real countByGenreGrouped
+            query. Skipped entirely if the user has no genre-tagged
+            entries (backend returns an empty byGenre, not an error). */}
+        {genreEntries.length > 0 && (
+          <div className="bg-surface p-6 md:col-span-3">
+            <p className="font-mono text-xs text-primary mb-4 uppercase">// Popular_Genres</p>
+            <div className="flex flex-wrap gap-3">
+              {genreEntries.map(([genre, count]) => (
+                <span
+                  key={genre}
+                  className="bg-surface-high border border-primary/30 text-white font-mono text-xs px-4 py-2 -skew-x-6 hover:bg-primary hover:border-primary transition-all"
+                >
+                  <span className="inline-block skew-x-6">{genre} [{count}]</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

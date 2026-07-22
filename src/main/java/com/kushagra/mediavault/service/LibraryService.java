@@ -164,7 +164,7 @@ public class LibraryService {
             entry.getStatus(),
             entry.getRating(),
             entry.getNotes(),
-            entry.getTags(),
+            new ArrayList<>(entry.getTags()),
             entry.getAddedAt(),
             entry.getUpdatedAt()
         );

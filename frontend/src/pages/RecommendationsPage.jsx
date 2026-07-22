@@ -6,16 +6,19 @@ const TYPE_COLORS = {
   SERIES: 'bg-series',
   ANIME: 'bg-anime',
   GAME: 'bg-game',
+  MANGA: 'bg-manga',
 };
+
+// Cycled by card index so adjacent cards don't all lean the same
+// direction - matches the scattered, overlapping-playing-cards look
+// from the mockup rather than a uniform grid.
+const ROTATIONS = ['-rotate-2', 'rotate-2', '-rotate-1', 'rotate-1', '-rotate-3'];
+const SHADOW_COLORS = ['#E3002B', '#00FFFF', '#FF00FF'];
 
 export default function RecommendationsPage() {
   const [recommendations, setRecommendations] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  // Tracks which recommendations have been added or dismissed, keyed by
-  // title - lets each card update independently without touching the
-  // others, and survives re-renders without needing to mutate the
-  // original recommendations array.
   const [addedTitles, setAddedTitles] = useState(new Set());
   const [dismissedTitles, setDismissedTitles] = useState(new Set());
 
@@ -23,10 +26,6 @@ export default function RecommendationsPage() {
     setLoading(true);
     setError(null);
     try {
-      // No library-emptiness check on the frontend - the backend
-      // already returns a specific, friendly message for that exact
-      // case ("Add some items to your library first..."), so err.message
-      // just IS the right thing to show, no need to duplicate that logic.
       const response = await apiGet('/recommendations');
       setRecommendations(response.recommendations);
       setAddedTitles(new Set());
@@ -38,10 +37,6 @@ export default function RecommendationsPage() {
     }
   }
 
-  // Same search-first pattern as AddEntryModal.findOrCreateMediaItem -
-  // reuse an existing catalog entry if the title matches, otherwise
-  // create fresh. Duplicated rather than extracted since it's the only
-  // second call site right now.
   async function addToArchive(rec) {
     try {
       const searchResult = await apiGet(`/media?search=${encodeURIComponent(rec.title)}`);
@@ -64,6 +59,7 @@ export default function RecommendationsPage() {
         status: 'PLANNED',
         rating: null,
         notes: '',
+        tags: [],
       });
 
       setAddedTitles((prev) => new Set(prev).add(rec.title));
@@ -82,67 +78,90 @@ export default function RecommendationsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="font-display text-3xl text-ink tracking-wide">AI RECOMMENDATIONS</h2>
-        <p className="font-mono text-xs text-ink/40 mt-1">
-          Machine-generated suggestions based on your archival habits.
-        </p>
+      <div className="mb-4">
+        <h2 className="font-display text-4xl font-black italic text-white uppercase">
+          AI Hyper-Targets
+        </h2>
+        <div className="flex items-center gap-4 mt-2">
+          <span className="bg-primary text-white px-3 py-1 font-mono text-xs font-black -skew-x-12 uppercase">
+            {recommendations ? `${visibleRecommendations.length} Active` : 'Standby'}
+          </span>
+          <div className="h-px flex-grow bg-on-background/10" />
+        </div>
       </div>
 
       <button
         onClick={handleGenerate}
         disabled={loading}
-        className="bg-ink text-paper font-mono text-xs uppercase tracking-wider px-6 py-3 hover:bg-ink/90 disabled:opacity-50 transition mb-8"
+        className="bg-primary text-white font-display italic font-black uppercase px-8 py-4 my-8 hover:shadow-[6px_6px_0px_0px_#fff] hover:-translate-x-1 hover:-translate-y-1 disabled:opacity-50 transition-all"
       >
-        {loading ? 'Consulting the archive...' : 'Generate Recommendations'}
+        {loading ? 'Consulting_Archive...' : 'Generate_Recommendations'}
       </button>
 
       {error && (
-        <p className="font-mono text-sm text-stamp mb-6">{error}</p>
+        <p className="font-mono text-sm text-primary uppercase mb-6">{error}</p>
       )}
 
       {recommendations !== null && visibleRecommendations.length === 0 && !error && (
-        <p className="font-mono text-sm text-ink/40">
-          All suggestions reviewed. Generate again for a fresh batch.
+        <p className="font-mono text-sm text-on-background/40 uppercase">
+          All targets reviewed. Generate again for a fresh batch.
         </p>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {visibleRecommendations.map((rec) => {
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 pb-12">
+        {visibleRecommendations.map((rec, index) => {
           const isAdded = addedTitles.has(rec.title);
-          // LLM output isn't guaranteed to match enum casing exactly
-          // even with the prompt constraining it - uppercase before
-          // lookup, fall back to a neutral color if it's still unmatched
-          // rather than crashing on an undefined className.
-          const colorClass = TYPE_COLORS[rec.type?.toUpperCase()] || 'bg-ink/20';
+          const colorClass = TYPE_COLORS[rec.type?.toUpperCase()] || 'bg-on-background/20';
+          const rotation = ROTATIONS[index % ROTATIONS.length];
+          const shadowColor = SHADOW_COLORS[index % SHADOW_COLORS.length];
 
           return (
-            <div key={rec.title} className="bg-white border-2 border-ink/10 p-5">
-              <div className="flex items-start justify-between mb-3">
-                <span className={`${colorClass} text-white font-mono text-[10px] uppercase px-2 py-1`}>
-                  {rec.type}
-                </span>
-              </div>
-              <h3 className="font-display text-2xl text-ink leading-tight mb-2">
-                {rec.title}
-              </h3>
-              <p className="font-sans text-sm text-ink/70 mb-4">
-                {rec.reason}
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => addToArchive(rec)}
-                  disabled={isAdded}
-                  className="flex-1 bg-ink text-paper font-mono text-xs uppercase tracking-wider py-2 hover:bg-ink/90 disabled:opacity-40 transition"
-                >
-                  {isAdded ? 'Added ✓' : 'Add to Archive'}
-                </button>
-                <button
-                  onClick={() => dismiss(rec.title)}
-                  className="font-mono text-xs uppercase tracking-wider border border-ink/20 text-ink/60 px-4 py-2 hover:border-ink/40 transition"
-                >
-                  Dismiss
-                </button>
+            <div
+              key={rec.title}
+              className={`relative group ${rotation} hover:rotate-0 transition-all hover:z-10 fade-in-up`}
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
+              <div
+                className="relative bg-surface-high border-2 border-on-background/20 p-1 hover-jitter"
+                style={{ boxShadow: `12px 12px 0px 0px ${shadowColor}` }}
+              >
+                <div className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <span className={`${colorClass} text-black font-mono text-[10px] font-black uppercase px-3 py-1 skew-x-6`}>
+                      <span className="inline-block -skew-x-6">{rec.type}</span>
+                    </span>
+                    {typeof rec.confidence === 'number' && (
+                      <span className="bg-primary text-white font-mono text-xs font-black px-3 py-1 -skew-x-6">
+                        <span className="inline-block skew-x-6">{rec.confidence.toFixed(1)}%</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <h3 className="font-display text-2xl font-black italic text-white uppercase leading-tight mb-3">
+                    {rec.title}
+                  </h3>
+
+                  <p className="font-mono text-xs text-on-background/60 uppercase leading-relaxed mb-6">
+                    Reason: {rec.reason}
+                  </p>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => addToArchive(rec)}
+                      disabled={isAdded}
+                      className="flex-1 bg-white text-background font-black font-mono text-xs uppercase py-3 hover:bg-primary hover:text-white disabled:opacity-40 transition-colors flex justify-between items-center px-4"
+                    >
+                      {isAdded ? 'Synced ✓' : 'Initialize_Sync'}
+                      {!isAdded && <span>»</span>}
+                    </button>
+                    <button
+                      onClick={() => dismiss(rec.title)}
+                      className="font-mono text-xs uppercase text-on-background/40 hover:text-primary px-3 border border-on-background/10 hover:border-primary transition-colors"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           );

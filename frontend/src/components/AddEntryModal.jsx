@@ -1,30 +1,41 @@
 import { useState } from 'react';
 import { apiGet, apiPost } from '../api/client';
 
-const TYPES = ['MOVIE', 'SERIES', 'ANIME', 'GAME'];
+const TYPES = ['MOVIE', 'SERIES', 'ANIME', 'GAME', 'MANGA'];
 const STATUSES = [
   { value: 'PLANNED', label: 'Planned' },
   { value: 'IN_PROGRESS', label: 'In Progress' },
   { value: 'COMPLETED', label: 'Completed' },
   { value: 'DROPPED', label: 'Dropped' },
+  { value: 'WISHLIST', label: 'Wishlist' },
+  { value: 'ON_HOLD', label: 'On Hold' },
 ];
 
-// onClose - called for both "Discard" and the X button, just closes with
-// no side effects. onSuccess - called ONLY after a real save completes,
-// so the parent knows to actually refresh the grid (see App.jsx next).
 export default function AddEntryModal({ onClose, onSuccess }) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState('MOVIE');
   const [status, setStatus] = useState('PLANNED');
   const [rating, setRating] = useState('');
   const [notes, setNotes] = useState('');
+  const [tags, setTags] = useState([]);
+  const [tagInput, setTagInput] = useState('');
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
+  function addTag(e) {
+    e.preventDefault();
+    const clean = tagInput.trim().toLowerCase().replace(/\s+/g, '-');
+    if (clean && !tags.includes(clean)) {
+      setTags([...tags, clean]);
+    }
+    setTagInput('');
+  }
+
+  function removeTag(tagToRemove) {
+    setTags(tags.filter((t) => t !== tagToRemove));
+  }
+
   async function findOrCreateMediaItem() {
-    // Search-first: reuse an existing catalog entry if the title already
-    // exists (case-insensitive), rather than letting the catalog fill up
-    // with duplicate "Inception" rows every time someone adds it.
     const searchResult = await apiGet(`/media?search=${encodeURIComponent(title)}`);
     const existing = searchResult.content.find(
       (item) => item.title.toLowerCase() === title.toLowerCase()
@@ -33,11 +44,6 @@ export default function AddEntryModal({ onClose, onSuccess }) {
       return existing.id;
     }
 
-    // No match - create a fresh catalog entry. genre/releaseYear/
-    // description are all optional on the backend (see
-    // MediaItemRequest), so null is fine here - the mockup's modal
-    // doesn't collect them, and PosterService only needs title + type
-    // to do its job.
     const created = await apiPost('/media', {
       title,
       type,
@@ -59,6 +65,7 @@ export default function AddEntryModal({ onClose, onSuccess }) {
         status,
         rating: rating === '' ? null : Number(rating),
         notes,
+        tags,
       });
       onSuccess();
     } catch (err) {
@@ -69,61 +76,69 @@ export default function AddEntryModal({ onClose, onSuccess }) {
   }
 
   return (
-    // Fixed overlay covering the whole viewport - clicking the dark
-    // backdrop closes the modal, same as clicking outside any standard
-    // dialog. stopPropagation on the inner card prevents a click INSIDE
-    // the form from bubbling up and triggering that same close.
     <div
-      className="fixed inset-0 bg-ink/40 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-background/80 backdrop-blur-md flex items-center justify-center z-50 p-6"
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-md p-6 relative"
+        className="relative w-full max-w-2xl bg-surface border-l-8 border-primary clip-diagonal shadow-[24px_24px_0px_0px_theme(colors.background)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between mb-6">
-          <h2 className="font-display text-2xl text-ink tracking-wide">ADD NEW ENTRY</h2>
+        <div className="p-8 pb-4 flex items-center justify-between">
+          <div className="relative">
+            <h2 className="font-display text-3xl font-black italic text-white -skew-x-6 uppercase">
+              New_Entry
+            </h2>
+            <div className="absolute -bottom-2 left-0 w-full h-1 bg-primary" />
+          </div>
           <button
             onClick={onClose}
-            className="text-ink/40 hover:text-ink text-xl leading-none"
+            className="text-on-background/40 hover:text-primary text-3xl leading-none transition-colors"
           >
             ×
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="p-8 pt-4 space-y-6">
           <div>
-            <label className="block font-mono text-[11px] uppercase tracking-wider text-ink/60 mb-1">
-              Item Title
+            <label className="block font-mono text-[11px] uppercase tracking-widest text-primary mb-2">
+              Target_Identity
             </label>
             <input
               type="text"
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter title..."
-              className="w-full border-b border-ink/30 bg-transparent py-2 font-sans text-ink placeholder:text-ink/30 focus:outline-none focus:border-ink"
+              placeholder="ENTER_TITLE..."
+              className="w-full bg-transparent border-b-4 border-white/20 py-3 px-4 text-white font-sans focus:outline-none focus:border-primary focus:bg-primary/5 transition-all placeholder:text-white/10"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-6">
             <div>
-              <label className="block font-mono text-[11px] uppercase tracking-wider text-ink/60 mb-1">
-                Media Type
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-primary mb-3">
+                Classification
               </label>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                className="w-full border-b border-ink/30 bg-transparent py-2 font-sans text-ink focus:outline-none focus:border-ink"
-              >
+              <div className="flex flex-wrap gap-2">
                 {TYPES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setType(t)}
+                    className={`px-4 py-2 text-xs font-mono uppercase tracking-wider border-2 transition-all ${
+                      type === t
+                        ? 'bg-primary text-white border-primary'
+                        : 'border-on-background/20 text-on-background/50 hover:border-primary hover:text-primary'
+                    }`}
+                  >
+                    {t}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
             <div>
-              <label className="block font-mono text-[11px] uppercase tracking-wider text-ink/60 mb-1">
-                Archive Rating
+              <label className="block font-mono text-[11px] uppercase tracking-widest text-primary mb-2">
+                Consumption_Rate
               </label>
               <input
                 type="number"
@@ -132,14 +147,14 @@ export default function AddEntryModal({ onClose, onSuccess }) {
                 value={rating}
                 onChange={(e) => setRating(e.target.value)}
                 placeholder="- / 10"
-                className="w-full border-b border-ink/30 bg-transparent py-2 font-sans text-ink placeholder:text-ink/30 focus:outline-none focus:border-ink"
+                className="w-full bg-transparent border-b-2 border-on-background/20 text-white font-display text-xl py-2 placeholder:text-on-background/20 focus:outline-none focus:border-primary focus:bg-primary/10 transition-all"
               />
             </div>
           </div>
 
           <div>
-            <label className="block font-mono text-[11px] uppercase tracking-wider text-ink/60 mb-2">
-              Vault Status
+            <label className="block font-mono text-[11px] uppercase tracking-widest text-primary mb-3">
+              Progress_Status
             </label>
             <div className="flex flex-wrap gap-2">
               {STATUSES.map((s) => (
@@ -147,10 +162,10 @@ export default function AddEntryModal({ onClose, onSuccess }) {
                   key={s.value}
                   type="button"
                   onClick={() => setStatus(s.value)}
-                  className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider border transition ${
+                  className={`px-4 py-2 text-xs font-mono uppercase tracking-wider border-2 transition-all ${
                     status === s.value
-                      ? 'bg-ink text-paper border-ink'
-                      : 'border-ink/20 text-ink/60 hover:border-ink/40'
+                      ? 'bg-primary text-white border-primary'
+                      : 'border-on-background/20 text-on-background/50 hover:border-primary hover:text-primary'
                   }`}
                 >
                   {s.label}
@@ -160,34 +175,65 @@ export default function AddEntryModal({ onClose, onSuccess }) {
           </div>
 
           <div>
-            <label className="block font-mono text-[11px] uppercase tracking-wider text-ink/60 mb-1">
-              Curator Notes
+            <label className="block font-mono text-[11px] uppercase tracking-widest text-primary mb-2">
+              Curator_Notes
             </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Transcription of first impressions or metadata observations..."
+              placeholder="Field notes, first impressions..."
               rows={3}
-              className="w-full border border-ink/20 bg-transparent p-2 font-sans text-sm text-ink placeholder:text-ink/30 focus:outline-none focus:border-ink resize-none"
+              className="w-full bg-surface-high border border-on-background/10 p-3 font-sans text-sm text-white placeholder:text-on-background/20 focus:outline-none focus:border-primary resize-none"
             />
           </div>
 
-          {error && <p className="text-sm text-stamp font-medium">{error}</p>}
+          <div>
+            <label className="block font-mono text-[11px] uppercase tracking-widest text-primary mb-3">
+              Keywords
+            </label>
+            <div className="flex flex-wrap gap-3 items-center">
+              {tags.map((tag) => (
+                <div
+                  key={tag}
+                  className="flex items-center gap-2 bg-surface-high px-3 py-1 border-l-4 border-white"
+                >
+                  <span className="font-mono text-xs text-white">#{tag}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    className="text-on-background/40 hover:text-primary text-sm leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addTag(e)}
+                placeholder="ADD_TAG + Enter"
+                className="bg-transparent border border-dashed border-on-background/20 px-3 py-1 font-mono text-xs uppercase text-white placeholder:text-on-background/30 focus:outline-none focus:border-primary transition-all w-32"
+              />
+            </div>
+          </div>
 
-          <div className="flex justify-end gap-3 pt-2">
+          {error && <p className="font-mono text-sm text-primary uppercase">{error}</p>}
+
+          <div className="flex justify-end gap-4 pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="font-mono text-xs uppercase tracking-wider text-ink/50 hover:text-ink px-4 py-2"
+              className="font-display italic font-bold uppercase text-white/60 hover:text-primary px-6 py-3 transition-colors"
             >
               Discard
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="bg-ink text-paper font-mono text-xs uppercase tracking-wider px-6 py-2 hover:bg-ink/90 disabled:opacity-50 transition"
+              className="bg-primary text-white font-black font-display italic uppercase px-8 py-3 hover:shadow-[4px_4px_0px_0px_#fff] hover:-translate-x-0.5 hover:-translate-y-0.5 disabled:opacity-50 transition-all"
             >
-              {submitting ? 'Saving...' : 'Save Entry'}
+              {submitting ? 'Saving...' : 'Confirm_Save'}
             </button>
           </div>
         </form>
