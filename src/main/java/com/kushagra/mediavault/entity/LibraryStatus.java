@@ -4,5 +4,7 @@ public enum LibraryStatus {
     PLANNED,
     IN_PROGRESS,
     COMPLETED,
-    DROPPED
+    DROPPED,
+    WISHLIST,
+    ON_HOLD
 }

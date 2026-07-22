@@ -28,33 +28,32 @@ public interface LibraryEntryRepository extends JpaRepository<LibraryEntry, Long
 
     // --- Phase 3: stats aggregation queries ---
 
-    // @Query lets us write JPQL directly instead of relying on Spring's
-    // method-name parsing - the naming convention can't express "group by
-    // and return pairs" on its own. "e" is an alias for LibraryEntry (set
-    // in the FROM clause), and e.status/e.user.id reference ENTITY FIELDS,
-    // not database columns - Spring translates this to real SQL at
-    // runtime, joining/filtering correctly either way.
-    //
-    // The return type here matters: Object[] because a GROUP BY query
-    // returns rows of mixed types (a LibraryStatus enum + a count) - JPA
-    // can't map that onto a single entity or DTO automatically, so we get
-    // raw rows back and build the Map ourselves in the service layer.
     @Query("SELECT e.status, COUNT(e) FROM LibraryEntry e WHERE e.user.id = :userId GROUP BY e.status")
     List<Object[]> countByStatusGrouped(@Param("userId") Long userId);
 
-    // Same pattern, grouping by the related MediaItem's type instead -
-    // e.mediaItem.type walks the relationship, which Spring turns into a
-    // JOIN automatically, same as your existing findByUserIdAndMediaItemType
-    // derived method already does.
     @Query("SELECT e.mediaItem.type, COUNT(e) FROM LibraryEntry e WHERE e.user.id = :userId GROUP BY e.mediaItem.type")
     List<Object[]> countByTypeGrouped(@Param("userId") Long userId);
 
-    // AVG(e.rating) - straightforward aggregate. Returns Double (boxed,
-    // nullable) rather than double, because if the user has zero rated
-    // entries, AVG() returns SQL NULL, not 0 - and we want to preserve
-    // that "no data" signal rather than lying with a fake 0.0 average.
     @Query("SELECT AVG(e.rating) FROM LibraryEntry e WHERE e.user.id = :userId AND e.rating IS NOT NULL")
     Double findAverageRating(@Param("userId") Long userId);
 
     long countByUserId(Long userId);
+
+    // --- Persona 5 redesign: genre aggregation ---
+
+    // Same GROUP BY / Object[] pattern as the status and type queries
+    // above - genre lives on the related MediaItem, not LibraryEntry
+    // itself, so e.mediaItem.genre walks the relationship same as
+    // countByTypeGrouped does for type. WHERE e.mediaItem.genre IS NOT
+    // NULL matters here specifically because genre is an optional field
+    // on MediaItem (unlike type, which is @Column(nullable = false)) -
+    // without this filter, untagged items would show up as a "null"
+    // genre bucket in the results, which is meaningless to display.
+    // ORDER BY COUNT(e) DESC means the first row IS the top genre - the
+    // service layer just needs row[0] of the first result, no separate
+    // query needed for "top genre" specifically.
+    @Query("SELECT e.mediaItem.genre, COUNT(e) FROM LibraryEntry e " +
+           "WHERE e.user.id = :userId AND e.mediaItem.genre IS NOT NULL " +
+           "GROUP BY e.mediaItem.genre ORDER BY COUNT(e) DESC")
+    List<Object[]> countByGenreGrouped(@Param("userId") Long userId);
 }

@@ -30,11 +30,6 @@ public class RecommendationService {
     @Value("${groq.api.model}")
     private String model;
 
-    // Jackson 3's JsonMapper replaces the old mutable ObjectMapper -
-    // built once via a builder and immutable/thread-safe after that,
-    // which is why we build it with .build() instead of "new
-    // ObjectMapper()". Functionally does the same job for us here
-    // (readValue JSON -> Java object).
     public RecommendationService(LibraryEntryRepository libraryEntryRepository) {
         this.libraryEntryRepository = libraryEntryRepository;
         this.restClient = RestClient.create();
@@ -67,14 +62,18 @@ public class RecommendationService {
 
         return """
             Based on this user's media library, suggest 3 new movies, series, \
-            anime, or games they would likely enjoy. Do not suggest titles \
-            already in their library.
+            anime, manga, or games they would likely enjoy. Do not suggest \
+            titles already in their library.
 
             Their library:
             %s
 
             Respond with ONLY valid JSON, no other text, in exactly this shape:
-            {"recommendations": [{"title": "...", "type": "MOVIE|SERIES|ANIME|GAME", "reason": "..."}]}
+            {"recommendations": [{"title": "...", "type": "MOVIE|SERIES|ANIME|GAME|MANGA", "reason": "...", "confidence": 87.5}]}
+
+            confidence is a number from 0 to 100 representing how strong a \
+            fit the suggestion is for this specific library - not a string, \
+            no percent sign.
             """.formatted(librarySummary);
     }
 
@@ -99,12 +98,6 @@ public class RecommendationService {
         return response.choices().get(0).message().content();
     }
 
-    // Jackson 3's JsonMapper throws unchecked JacksonException instead of
-    // Jackson 2's checked JsonProcessingException - functionally we still
-    // want to catch it here and turn it into our own clear error message,
-    // same as before, just note this catch isn't strictly REQUIRED by the
-    // compiler anymore (Jackson 3 exceptions are RuntimeExceptions) - we
-    // catch it anyway for a clean error message instead of a raw stack trace.
     private RecommendationResponse parseRecommendations(String rawContent) {
         try {
             String cleaned = rawContent.trim();

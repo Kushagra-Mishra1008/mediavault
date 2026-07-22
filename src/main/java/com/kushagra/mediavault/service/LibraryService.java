@@ -19,7 +19,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -51,6 +54,7 @@ public class LibraryService {
             });
 
         LibraryEntry entry = new LibraryEntry(user, mediaItem, request.status(), request.rating(), request.notes());
+        entry.setTags(request.tags() != null ? request.tags() : new ArrayList<>());
         LibraryEntry saved = libraryEntryRepository.save(entry);
         return toResponse(saved);
     }
@@ -72,6 +76,9 @@ public class LibraryService {
         }
         if (request.notes() != null) {
             entry.setNotes(request.notes());
+        }
+        if (request.tags() != null) {
+            entry.setTags(request.tags());
         }
 
         return toResponse(entry);
@@ -122,9 +129,22 @@ public class LibraryService {
 
         Double avgRating = libraryEntryRepository.findAverageRating(userId);
 
-        return new LibraryStatsResponse(total, byStatus, byType, avgRating);
+        List<Object[]> genreRows = libraryEntryRepository.countByGenreGrouped(userId);
+        Map<String, Long> byGenre = new LinkedHashMap<>();
+        for (Object[] row : genreRows) {
+            byGenre.put((String) row[0], (Long) row[1]);
+        }
+
+        String topGenre = genreRows.isEmpty() ? null : (String) genreRows.get(0)[0];
+
+        return new LibraryStatsResponse(total, byStatus, byType, avgRating, byGenre, topGenre);
     }
 
+    // mi.getImageUrl() is the field that was missing - MediaItemResponse
+    // picked up an 8th field (imageUrl) back when PosterService was
+    // built, but this constructor call never got updated to match. That
+    // mismatch is exactly what the compiler error was pointing at:
+    // "required 8 args, found 7."
     private LibraryEntryResponse toResponse(LibraryEntry entry) {
         MediaItem mi = entry.getMediaItem();
         MediaItemResponse mediaItemResponse = new MediaItemResponse(
@@ -144,6 +164,7 @@ public class LibraryService {
             entry.getStatus(),
             entry.getRating(),
             entry.getNotes(),
+            entry.getTags(),
             entry.getAddedAt(),
             entry.getUpdatedAt()
         );

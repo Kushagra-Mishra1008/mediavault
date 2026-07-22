@@ -6,10 +6,11 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
+import java.util.List;
+
 // Body for POST /api/library - adding a media item to your library.
-// @Min/@Max on rating enforce the 1-10 range declared in the project spec -
-// Spring validates this automatically when the controller method is
-// annotated @Valid, before your code even runs.
+// tags is optional (no @NotNull) - a fresh entry might not have any yet.
+// null here just means "no tags provided", handled as empty in the service.
 public record LibraryEntryRequest(
     @NotNull(message = "mediaItemId is required")
     Long mediaItemId,
@@ -21,6 +22,8 @@ public record LibraryEntryRequest(
     @Max(value = 10, message = "rating must be between 1 and 10")
     Integer rating,
 
-    String notes
+    String notes,
+
+    List<String> tags
 ) {
 }

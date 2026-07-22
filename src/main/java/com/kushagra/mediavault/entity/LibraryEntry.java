@@ -3,6 +3,8 @@ package com.kushagra.mediavault.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(
@@ -31,6 +33,18 @@ public class LibraryEntry {
 
     @Column(columnDefinition = "TEXT")
     private String notes;
+
+    // @ElementCollection: for a collection of simple values (not entities)
+    // owned entirely by this row - Hibernate auto-creates a separate join
+    // table (library_entry_tags: library_entry_id, tags) since a List
+    // can't be stored in a single column. FetchType.LAZY here for the same
+    // reason as your @ManyToOne fields - don't pull tags unless something
+    // actually asks for entry.getTags(). Defaults to an empty list, never
+    // null, so callers don't need null-checks before iterating.
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "library_entry_tags", joinColumns = @JoinColumn(name = "library_entry_id"))
+    @Column(name = "tag")
+    private List<String> tags = new ArrayList<>();
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime addedAt;
@@ -87,6 +101,18 @@ public class LibraryEntry {
 
     public void setNotes(String notes) {
         this.notes = notes;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public List<String> getTags() {
+        return tags;
+    }
+
+    // Replaces the whole list rather than offering add/remove-single
+    // methods - matches how the frontend will send it (PATCH with the
+    // full current tag list, same pattern as status/rating/notes).
+    public void setTags(List<String> tags) {
+        this.tags = tags;
         this.updatedAt = LocalDateTime.now();
     }
 

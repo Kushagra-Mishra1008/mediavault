@@ -3,6 +3,7 @@ package com.kushagra.mediavault.dto;
 
 import com.kushagra.mediavault.entity.LibraryStatus;
 import java.time.LocalDateTime;
+import java.util.List;
 
 // Nests the full MediaItemResponse instead of just a mediaItemId - saves
 // the frontend a second API call to show the title/type/etc alongside each
@@ -15,6 +16,7 @@ public record LibraryEntryResponse(
     LibraryStatus status,
     Integer rating,
     String notes,
+    List<String> tags,
     LocalDateTime addedAt,
     LocalDateTime updatedAt
 ) {
