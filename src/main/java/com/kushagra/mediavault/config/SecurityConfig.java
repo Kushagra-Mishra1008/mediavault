@@ -13,6 +13,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -33,9 +38,36 @@ public class SecurityConfig {
         return config.getAuthenticationManager();
     }
 
+    // Defines which frontend origins are allowed to call this API from a
+    // browser. The browser sends a preflight OPTIONS request before the
+    // real one (login, in your error) - Spring never even sees your actual
+    // POST /api/auth/login until this preflight passes. Without this bean,
+    // Security has no CORS config at all, so every cross-origin request
+    // (Netlify -> Render, different origins) gets silently blocked by the
+    // browser itself, before your controller ever runs.
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of(
+            "https://mediavault67.netlify.app",
+            "http://localhost:5173" // Vite dev server
+        ));
+        config.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            // Tells Security's filter chain to actually use the CORS bean
+            // above. Must come before .csrf() in the chain for Security to
+            // apply it correctly on every request, including preflights.
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
 
             .sessionManagement(session ->
@@ -43,8 +75,6 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
-                // Keep-alive ping target - must be reachable with no JWT,
-                // same reasoning as /api/auth/** above.
                 .requestMatchers("/api/health").permitAll()
                 .anyRequest().authenticated()
             )
