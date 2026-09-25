@@ -1,72 +1,87 @@
 import { useState, useEffect, useRef } from 'react';
+import { AnimatePresence, m } from 'motion/react';
+import { User, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import Ransom from '../components/Ransom';
+import Rook, { Bubble } from '../components/Rook';
+import { Spinner } from '../components/ui';
 
+// Red pixel sparks that trail the cursor. The loop only runs while
+// sparks are alive (it sleeps when the mouse is still), is capped, and is
+// skipped entirely on touch devices and for reduced-motion users.
 function CursorTrail() {
   const canvasRef = useRef(null);
 
   useEffect(() => {
+    if (window.matchMedia('(pointer: coarse), (prefers-reduced-motion: reduce)').matches) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     let particles = [];
-    let animationId;
+    let frame = null;
 
     function resize() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     }
     resize();
-    window.addEventListener('resize', resize);
 
-    function handleMove(e) {
-      for (let i = 0; i < 2; i++) {
-        particles.push({
-          x: e.clientX,
-          y: e.clientY,
-          size: Math.random() * 4 + 1,
-          speedX: Math.random() * 3 - 1.5,
-          speedY: Math.random() * 3 - 1.5,
-          life: 1,
-        });
-      }
-    }
-    window.addEventListener('mousemove', handleMove);
-
-    function animate() {
+    function tick() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      particles.forEach((p) => {
-        p.x += p.speedX;
-        p.y += p.speedY;
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
         p.life -= 0.05;
         ctx.fillStyle = `rgba(227, 0, 43, ${p.life})`;
         ctx.fillRect(p.x, p.y, p.size, p.size);
-      });
+      }
       particles = particles.filter((p) => p.life > 0);
-      animationId = requestAnimationFrame(animate);
+      frame = particles.length ? requestAnimationFrame(tick) : null;
     }
-    animate();
 
+    function onMove(e) {
+      if (particles.length > 80) return;
+      for (let i = 0; i < 2; i++) {
+        particles.push({ x: e.clientX, y: e.clientY, size: Math.random() * 4 + 1, vx: Math.random() * 3 - 1.5, vy: Math.random() * 3 - 1.5, life: 1 });
+      }
+      if (!frame) frame = requestAnimationFrame(tick);
+    }
+
+    window.addEventListener('resize', resize);
+    window.addEventListener('mousemove', onMove, { passive: true });
     return () => {
       window.removeEventListener('resize', resize);
-      window.removeEventListener('mousemove', handleMove);
-      cancelAnimationFrame(animationId);
+      window.removeEventListener('mousemove', onMove);
+      if (frame) cancelAnimationFrame(frame);
     };
   }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 pointer-events-none z-50 opacity-50"
-    />
-  );
+  return <canvas ref={canvasRef} aria-hidden="true" className="fixed inset-0 pointer-events-none z-50 opacity-60" />;
 }
 
-export default function LoginPage() {
+const MODES = [
+  { key: 'login', label: 'Login' },
+  { key: 'register', label: 'Register' },
+];
+
+const ROOK_LINES = {
+  login: "Welcome back. I kept the vault warm for you.",
+  register: "New face? Let's get you set up.",
+  error: "Hmm, that key didn't fit. Try again?",
+};
+
+const ease = [0.16, 1, 0.3, 1];
+
+// onAuthenticated(username) - lets App play the screen wipe.
+export default function LoginPage({ onAuthenticated }) {
   const { login, register } = useAuth();
   const [mode, setMode] = useState('login');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
+  // Bumped per failure so the shake + Rook's reaction replay each time.
+  const [failures, setFailures] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e) {
@@ -79,160 +94,230 @@ export default function LoginPage() {
       } else {
         await register(username, email, password);
       }
+      onAuthenticated(username);
     } catch (err) {
       setError(err.message);
-    } finally {
+      setFailures((f) => f + 1);
       setSubmitting(false);
     }
   }
 
+  function switchMode(next) {
+    setMode(next);
+    setError(null);
+  }
+
+  const rookLine = error ? ROOK_LINES.error : ROOK_LINES[mode];
+
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center">
+    <div className="min-h-dvh bg-background relative overflow-hidden flex items-center justify-center py-12">
       <CursorTrail />
 
-      <div className="absolute top-0 left-0 w-64 h-64 halftone-bg pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-96 h-96 halftone-bg pointer-events-none" />
-
-      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[400px] bg-primary -rotate-[15deg] opacity-90 shadow-[0_0_100px_rgba(227,0,43,0.3)]" />
+      {/* ---------- Backdrop ---------- */}
+      <div aria-hidden="true" className="absolute inset-0 pointer-events-none">
+        <div className="absolute -inset-40 text-primary/[0.12] halftone drift" />
+        <m.div
+          className="absolute top-1/2 left-1/2 w-[160%] h-[380px] -ml-[80%] -mt-[190px] bg-primary -rotate-[15deg] origin-left"
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 0.7, ease }}
+        />
+        <m.div
+          className="absolute top-1/2 left-1/2 w-[160%] h-6 -ml-[80%] mt-[170px] bg-paper -rotate-[15deg] origin-right"
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 0.6, ease, delay: 0.2 }}
+        />
       </div>
 
-      <main className="relative z-10 w-full max-w-5xl px-8 flex flex-col md:flex-row items-center gap-12">
+      <main className="relative z-10 w-full max-w-6xl px-5 sm:px-8 flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
+        {/* ---------- Hero ---------- */}
+        <div className="flex-1 text-center lg:text-left">
+          <m.div
+            initial={{ opacity: 0, y: -10, rotate: -8 }}
+            animate={{ opacity: 1, y: 0, rotate: -3 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 20, delay: 0.3 }}
+            className="inline-block bg-ink text-paper px-5 py-2 mb-6 border-2 border-paper"
+          >
+            <span className="font-mono text-xs font-bold tracking-[0.2em] uppercase">Your media. Your rules.</span>
+          </m.div>
 
-        <div className="flex-1 text-center md:text-left">
-          <div className="inline-block bg-primary text-white px-6 py-2 -rotate-3 mb-4">
-            <span className="font-mono text-xs tracking-widest uppercase">
-              System Protocol: Active
+          <m.h1
+            initial={{ opacity: 0, scale: 1.3, rotate: 4 }}
+            animate={{ opacity: 1, scale: 1, rotate: -2 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 18, delay: 0.4 }}
+            className="flex flex-col items-center lg:items-start gap-2"
+          >
+            <Ransom text="Media" size="text-6xl sm:text-8xl" />
+            <span className="font-display italic font-black text-6xl sm:text-8xl leading-none uppercase tracking-tighter bg-paper text-primary px-4 -skew-x-6 shadow-[10px_10px_0_0_var(--color-ink)]">
+              Vault
             </span>
-          </div>
-          <h1 className="font-display text-6xl md:text-8xl italic font-black text-white tracking-tighter uppercase leading-none mb-6">
-            MEDIA<br />
-            <span className="text-primary bg-white px-4 inline-block">VAULT</span>
-          </h1>
-          <p className="font-sans text-lg text-on-surface-variant max-w-md mx-auto md:mx-0 opacity-80 border-l-4 border-primary pl-6">
-            The definitive archive for digital defiance. Catalog your collection. Secure the data.
-          </p>
+          </m.h1>
+
+          <m.p
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, ease, delay: 0.6 }}
+            className="mt-8 text-lg text-paper max-w-md mx-auto lg:mx-0 bg-ink/80 border-l-8 border-paper px-5 py-3 text-left"
+          >
+            Every movie, series, anime, game and manga you&apos;ve conquered, in one place. Level up as you go.
+          </m.p>
+
+          <m.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease, delay: 0.75 }}
+            className="hidden lg:flex items-end gap-4 mt-10"
+          >
+            <Rook size={110} hop={failures} mood={error ? 'shock' : 'smug'} />
+            <div className="mb-16">
+              <Bubble tail="left">{rookLine}</Bubble>
+            </div>
+          </m.div>
         </div>
 
-        <div className="w-full max-w-md relative group">
-          <div className="absolute inset-0 bg-primary translate-x-4 translate-y-4 -skew-x-3 transition-transform group-hover:translate-x-6 group-hover:translate-y-6" />
-
-          <div className="relative bg-surface p-8 md:p-12 -skew-x-3 border-2 border-white/10 shadow-2xl">
-            <div className="skew-x-3">
-
-              <div className="flex gap-4 mb-10 border-b-2 border-white/5 pb-4">
-                <button
-                  type="button"
-                  onClick={() => { setMode('login'); setError(null); }}
-                  className={`font-display text-2xl font-black uppercase tracking-tight transition-all hover:translate-x-1 ${
-                    mode === 'login' ? 'text-primary' : 'text-on-surface-variant/40 hover:text-white'
-                  }`}
-                >
-                  LOGIN
-                </button>
-                <span className="text-white/20 font-black text-2xl">/</span>
-                <button
-                  type="button"
-                  onClick={() => { setMode('register'); setError(null); }}
-                  className={`font-display text-2xl font-black uppercase tracking-tight transition-all hover:translate-x-1 ${
-                    mode === 'register' ? 'text-primary' : 'text-on-surface-variant/40 hover:text-white'
-                  }`}
-                >
-                  REGISTER
-                </button>
+        {/* ---------- Form card ---------- */}
+        <m.div
+          initial={{ opacity: 0, x: 80, rotate: 6 }}
+          animate={{ opacity: 1, x: 0, rotate: 0 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 24, delay: 0.35 }}
+          className="w-full max-w-md relative"
+        >
+          <div aria-hidden="true" className="absolute inset-0 bg-ink translate-x-4 translate-y-4 -skew-x-3" />
+          {/* Shake on each failed attempt. Alternating keyframes (instead of
+              remounting) keeps the inputs and focus intact. */}
+          <m.div
+            animate={{ x: failures === 0 ? 0 : failures % 2 ? [0, -12, 10, -6, 4, 0] : [0, 12, -10, 6, -4, 0] }}
+            transition={{ duration: 0.4 }}
+            className="relative bg-surface border-4 border-paper -skew-x-3"
+          >
+            <div className="skew-x-3 p-7 sm:p-10">
+              {/* Mode switch with a sliding red slash */}
+              <div className="flex gap-2 mb-8" role="tablist">
+                {MODES.map((item) => {
+                  const active = mode === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => switchMode(item.key)}
+                      className={`relative px-4 py-1.5 font-display italic font-black text-2xl uppercase tracking-tight transition-colors ${
+                        active ? 'text-paper' : 'text-on-background/35 hover:text-paper'
+                      }`}
+                    >
+                      {active && (
+                        <m.span
+                          layoutId="auth-mode"
+                          className="absolute inset-0 bg-primary -skew-x-12"
+                          transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+                        />
+                      )}
+                      <span className="relative">{item.label}</span>
+                    </button>
+                  );
+                })}
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-8">
-                <div className="relative group/field">
-                  <label className="block font-mono text-xs text-primary uppercase mb-2">
-                    User Identity
-                  </label>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <IconField icon={User} label="Codename">
                   <input
                     type="text"
                     required
+                    autoComplete="username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="OPERATIVE_ID"
-                    className="w-full bg-transparent border-b-4 border-white/20 py-3 px-4 text-white font-sans focus:outline-none focus:border-primary focus:bg-primary/5 transition-all placeholder:text-white/10"
+                    placeholder="your_username"
+                    className="field pl-11"
                   />
-                </div>
+                </IconField>
 
-                {mode === 'register' && (
-                  <div className="relative group/field">
-                    <label className="block font-mono text-xs text-primary uppercase mb-2">
-                      Contact Frequency
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="EMAIL_ADDRESS"
-                      className="w-full bg-transparent border-b-4 border-white/20 py-3 px-4 text-white font-sans focus:outline-none focus:border-primary focus:bg-primary/5 transition-all placeholder:text-white/10"
-                    />
-                  </div>
-                )}
+                <AnimatePresence initial={false}>
+                  {mode === 'register' && (
+                    <m.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25, ease }}
+                      className="overflow-hidden"
+                    >
+                      <IconField icon={Mail} label="Email">
+                        <input
+                          type="email"
+                          required
+                          autoComplete="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="you@example.com"
+                          className="field pl-11"
+                        />
+                      </IconField>
+                    </m.div>
+                  )}
+                </AnimatePresence>
 
-                <div className="relative group/field">
-                  <label className="block font-mono text-xs text-primary uppercase mb-2">
-                    Security Cipher
-                  </label>
+                <IconField icon={Lock} label="Password">
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full bg-transparent border-b-4 border-white/20 py-3 px-4 text-white font-sans focus:outline-none focus:border-primary focus:bg-primary/5 transition-all placeholder:text-white/10"
+                    className="field pl-11 pr-12"
                   />
-                </div>
-
-                {error && (
-                  <p className="font-mono text-sm text-primary uppercase">{error}</p>
-                )}
-
-                <div className="pt-4 space-y-4">
                   <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full bg-primary text-white py-5 px-8 font-display text-2xl font-black uppercase tracking-widest flex justify-between items-center jitter-on-hover transition-all disabled:opacity-50"
+                    type="button"
+                    onClick={() => setShowPassword((s) => !s)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 size-9 grid place-items-center text-on-background/40 hover:text-paper"
                   >
-                    <span>
-                      {submitting
-                        ? 'Processing...'
-                        : mode === 'login' ? 'Initialize Access' : 'Create Profile'}
-                    </span>
-                    <span>→</span>
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
+                </IconField>
 
-                  {mode === 'login' && (
-                    <div className="flex justify-between items-center font-mono text-xs uppercase opacity-60">
-                      <label className="flex items-center gap-2 cursor-pointer hover:text-white transition-colors">
-                        <input type="checkbox" className="rounded-none bg-transparent border-2 border-white/20 text-primary" />
-                        PERSIST SESSION
-                      </label>
-                      <span className="opacity-40 cursor-not-allowed" title="Not implemented yet">
-                        Lost Protocol?
-                      </span>
-                    </div>
+                <AnimatePresence>
+                  {error && (
+                    <m.p
+                      role="alert"
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="bg-primary text-paper font-mono text-xs font-bold uppercase px-3 py-2 -skew-x-6"
+                    >
+                      {error}
+                    </m.p>
                   )}
-                </div>
+                </AnimatePresence>
+
+                <button type="submit" disabled={submitting} className="btn-primary w-full h-16 text-xl sm:text-2xl justify-between px-6 sm:px-8 mt-2 whitespace-nowrap">
+                  <span>{submitting ? 'Breaking in…' : mode === 'login' ? 'Enter the Vault' : 'Join the Crew'}</span>
+                  {submitting ? <Spinner size={20} /> : <ArrowRight size={26} strokeWidth={3} />}
+                </button>
               </form>
             </div>
-          </div>
-        </div>
-      </main>
+          </m.div>
 
-      <footer className="fixed bottom-0 left-0 w-full p-6 flex justify-between items-end pointer-events-none">
-        <div className="font-mono text-[10px] space-y-1 opacity-20 hidden md:block text-on-background">
-          <div>ENCRYPTED SESSION LAYER</div>
-          <div>MEDIAVAULT v1.0</div>
-        </div>
-        <div className="bg-primary text-white px-4 py-1 font-mono text-xs flex items-center gap-2 pointer-events-auto">
-          <span>🛡</span>
-          ENCRYPTED CONNECTION ESTABLISHED
-        </div>
-      </footer>
+          {/* Rook peeks in on mobile, where the hero version is hidden */}
+          <div className="lg:hidden flex items-end gap-3 mt-10 justify-center">
+            <Rook size={64} hop={failures} mood={error ? 'shock' : 'smug'} />
+            <div className="mb-10"><Bubble tail="left">{rookLine}</Bubble></div>
+          </div>
+        </m.div>
+      </main>
     </div>
+  );
+}
+
+function IconField({ icon: Icon, label, children }) {
+  return (
+    <label className="block">
+      <span className="hud-label text-primary block mb-2">{label}</span>
+      <span className="relative block">
+        <Icon size={18} strokeWidth={2.5} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-on-background/40 pointer-events-none" />
+        {children}
+      </span>
+    </label>
   );
 }

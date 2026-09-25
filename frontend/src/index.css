@@ -1,104 +1,228 @@
 @import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Anybody:ital,wght@0,400..900;1,400..900&family=Archivo+Narrow:wght@400..900&family=JetBrains+Mono:wght@400..900&display=swap');
-
+/* Palette + fonts. Every --color-X makes bg-X/text-X/border-X utilities.
+   Fonts are loaded from index.html (non-blocking). */
 @theme {
   --color-background: #0B0B0D;
   --color-surface: #1A1A1D;
   --color-surface-high: #2e1a19;
+  --color-ink: #000000;
+  --color-paper: #ffffff;
 
   --color-primary: #E3002B;
+  --color-primary-hot: #ff2447;
 
   --color-on-background: #FEDAD8;
   --color-on-surface-variant: #E8BCB9;
 
+  /* Media-type identity colors. Checked on the dark surface; always
+     shown with a text label, never color alone. */
   --color-movie: #FFBF00;
-  --color-series: #00FFFF;
-  --color-anime: #FF00FF;
-  --color-game: #8F00FF;
+  --color-series: #00E5FF;
+  --color-anime: #FF2BD6;
+  --color-game: #A45CFF;
   --color-manga: #FF6B35;
 
-  --font-display: "Anybody", sans-serif;
+  --font-display: "Anybody", "Archivo Narrow", sans-serif;
   --font-sans: "Archivo Narrow", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --ease-snap: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-punch: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @layer base {
+  html {
+    color-scheme: dark;
+    scrollbar-gutter: stable;
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
-    @apply bg-background text-on-background font-sans;
+    @apply bg-background text-on-background font-sans antialiased;
+    min-height: 100dvh;
+  }
+  ::selection {
+    background: var(--color-primary);
+    color: white;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-paper);
+    outline-offset: 3px;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-primary) transparent;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
   }
 }
 
-@layer utilities {
-  .clip-diagonal {
-    clip-path: polygon(0 0, 100% 0, 100% 90%, 90% 100%, 0 100%);
-  }
-  .clip-slant-right {
-    clip-path: polygon(0 0, 100% 15%, 100% 100%, 0 85%);
-  }
-  .clip-badge {
-    clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
-  }
-  .jagged-border {
-    box-shadow: 8px 8px 0px 0px var(--color-primary);
-  }
-  .halftone-bg {
-    background-image: radial-gradient(var(--color-primary) 1px, transparent 0);
-    background-size: 12px 12px;
-    opacity: 0.15;
-  }
+/* ---------- Shapes ---------- */
+@utility clip-diagonal {
+  clip-path: polygon(0 0, 100% 0, 100% 92%, 92% 100%, 0 100%);
+}
+@utility clip-badge {
+  clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
+}
+@utility clip-slash {
+  clip-path: polygon(4% 0, 100% 0, 96% 100%, 0 100%);
+}
+/* Jagged starburst - the "impact" shape behind titles and pop-ups */
+@utility clip-burst {
+  clip-path: polygon(50% 0, 61% 20%, 84% 8%, 78% 32%, 100% 38%, 82% 54%, 96% 76%, 72% 74%, 66% 100%, 50% 82%, 32% 100%, 28% 76%, 4% 80%, 18% 56%, 0 36%, 22% 30%, 16% 6%, 40% 20%);
+}
+/* Torn-paper bottom edge */
+@utility clip-torn {
+  clip-path: polygon(0 0, 100% 0, 100% 88%, 94% 94%, 88% 89%, 80% 97%, 71% 90%, 62% 98%, 52% 91%, 44% 97%, 35% 90%, 26% 96%, 17% 89%, 9% 95%, 0 90%);
+}
 
-  @keyframes jitter {
-    0% { transform: translate(0,0); }
-    10% { transform: translate(-1px, 1px); }
-    20% { transform: translate(1px, -1px); }
-    30% { transform: translate(-1px, -1px); }
-    40% { transform: translate(1px, 1px); }
-    50% { transform: translate(0,0); }
-  }
-  .jitter-on-hover:hover {
-    animation: jitter 0.2s infinite;
-  }
+@utility halftone {
+  background-image: radial-gradient(currentColor 1.2px, transparent 1.4px);
+  background-size: 10px 10px;
+}
 
-  @keyframes glitch-anim {
-    0% { transform: translate(0); }
-    20% { transform: translate(-2px, 2px); }
-    40% { transform: translate(-2px, -2px); }
-    60% { transform: translate(2px, 2px); }
-    80% { transform: translate(2px, -2px); }
-    100% { transform: translate(0); }
-  }
-  .hover-glitch:hover {
-    animation: glitch-anim 0.2s infinite;
-  }
+@utility hud-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
 
-  /* Recommendation card jitter - includes a slight rotate wobble on
-     top of the translate, matching Stitch's .hover-jitter. Distinct
-     from .hover-glitch above (library cards) - same idea, different
-     card family, kept as its own class rather than reusing one
-     animation everywhere so each area of the app can tune its own
-     "aggressiveness" independently later if you want. */
-  @keyframes card-jitter {
-    0% { transform: translate(0,0) rotate(0deg); }
-    25% { transform: translate(1px, -1px) rotate(0.5deg); }
-    50% { transform: translate(-1px, 1px) rotate(-0.5deg); }
-    75% { transform: translate(1px, 1px) rotate(0.2deg); }
-    100% { transform: translate(0,0) rotate(0deg); }
-  }
-  .hover-jitter:hover {
-    animation: card-jitter 0.15s infinite;
-  }
+/* ---------- Buttons & fields ----------
+   Hover = one decisive "snap" (lift + hard shadow), never a looping
+   shake - the old infinite jitter read as lag. */
+@utility btn {
+  @apply relative inline-flex items-center justify-center gap-2 select-none uppercase
+    transition-[translate,box-shadow,background-color,color,opacity] duration-150 ease-(--ease-snap)
+    active:translate-x-0 active:translate-y-0 active:shadow-none
+    disabled:opacity-50 disabled:pointer-events-none;
+}
+@utility btn-primary {
+  @apply btn bg-primary text-white font-display italic font-black tracking-wide px-6 h-12 -skew-x-6
+    hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[5px_5px_0_0_var(--color-paper)];
+}
+@utility btn-paper {
+  @apply btn bg-paper text-ink font-display italic font-black tracking-wide px-6 h-12 -skew-x-6
+    hover:bg-primary hover:text-white hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[5px_5px_0_0_var(--color-paper)];
+}
+@utility btn-ghost {
+  @apply btn font-display italic font-bold tracking-wide px-5 h-12 text-on-background/60 hover:text-primary;
+}
+@utility field {
+  @apply w-full bg-ink/40 border-b-4 border-white/15 px-4 h-12 text-white font-sans text-base placeholder:text-white/20
+    transition-[border-color,background-color] duration-150
+    hover:border-white/30 focus:outline-none focus:border-primary focus:bg-primary/[0.07];
+}
 
-  /* Staggered load-in - each recommendation card fades/slides up on
-     mount. The stagger itself (WHICH card waits how long) is set via
-     inline style animationDelay in the component, since that value is
-     different per card index and can't live in a static CSS class. */
-  @keyframes fade-in-up {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .fade-in-up {
-    animation: fade-in-up 0.6s cubic-bezier(0.23, 1, 0.32, 1) forwards;
-    opacity: 0;
+/* ---------- Motion ---------- */
+
+/* One-shot glitch when a card is hovered: plays once, then settles. */
+@keyframes glitch-once {
+  0% { translate: 0 0; }
+  25% { translate: -3px 2px; }
+  50% { translate: 3px -2px; }
+  75% { translate: -1px -1px; }
+  100% { translate: 0 0; }
+}
+
+/* Card entrance - CSS keyframes, no JS per card. `backwards` hides the
+   card during its stagger delay, then releases so hover still works. */
+.slam-in {
+  animation: slam-in 0.5s var(--ease-punch) backwards;
+}
+@keyframes slam-in {
+  from { opacity: 0; translate: 0 28px; rotate: -3deg; }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgb(227 0 43 / 0.18) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: shimmer 1.2s infinite;
+}
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+
+/* Mascot idle float + blink */
+.float-idle {
+  animation: float-idle 3.2s ease-in-out infinite;
+}
+@keyframes float-idle {
+  50% { translate: 0 -5px; }
+}
+.blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: blink 4.8s steps(1) infinite;
+}
+@keyframes blink {
+  0% { scale: 1 1; }
+  94% { scale: 1 0.1; }
+  97% { scale: 1 1; }
+}
+
+/* Slowly drifting halftone for big backgrounds (transform only) */
+.drift {
+  animation: drift 30s linear infinite;
+}
+@keyframes drift {
+  to { transform: translate3d(-120px, 60px, 0); }
+}
+
+/* ---------- Screen transitions ----------
+   Login/logout wipe (1.15s) and the per-page slash (0.55s). Keyframe
+   percentages are shared so all layers stay locked together. */
+.wipe-red { animation: wipe-red 1.15s cubic-bezier(0.7, 0, 0.2, 1) both; }
+.wipe-black { animation: wipe-black 1.15s cubic-bezier(0.7, 0, 0.2, 1) both; }
+.wipe-dots { animation: wipe-dots 1.15s linear both; }
+.wipe-stamp { animation: wipe-stamp 1.15s ease-out both; }
+@keyframes wipe-red {
+  0% { transform: translateX(-130%) rotate(-12deg); }
+  28%, 66% { transform: translateX(0) rotate(-12deg); }
+  100% { transform: translateX(130%) rotate(-12deg); }
+}
+@keyframes wipe-black {
+  0%, 10% { transform: translateX(130%) rotate(-12deg); }
+  34%, 62% { transform: translateX(6%) rotate(-12deg); }
+  92%, 100% { transform: translateX(-140%) rotate(-12deg); }
+}
+@keyframes wipe-dots {
+  0%, 32% { opacity: 0; }
+  42% { opacity: 1; }
+  60%, 100% { opacity: 0; }
+}
+@keyframes wipe-stamp {
+  0%, 32% { opacity: 0; transform: scale(1.6); }
+  40%, 58% { opacity: 1; transform: scale(1); }
+  66%, 100% { opacity: 0; transform: scale(0.92); }
+}
+
+.slash-red { animation: slash-sweep 0.55s cubic-bezier(0.7, 0, 0.3, 1) both; }
+.slash-black { animation: slash-sweep-2 0.55s cubic-bezier(0.7, 0, 0.3, 1) 0.05s both; }
+@keyframes slash-sweep {
+  from { transform: translateX(-110%) skewX(-20deg); }
+  to { transform: translateX(210%) skewX(-20deg); }
+}
+@keyframes slash-sweep-2 {
+  from { transform: translateX(-130%) skewX(-20deg); }
+  to { transform: translateX(240%) skewX(-20deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
