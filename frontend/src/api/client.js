@@ -66,6 +66,7 @@ async function request(method, path, body) {
   // to parse - calling response.json() on it throws. Handle it before
   // trying to parse anything.
   if (response.status === 204) {
+    notifyLibraryChange(method, path);
     return null;
   }
 
@@ -79,7 +80,17 @@ async function request(method, path, body) {
     throw new ApiError(data.message || 'Something went wrong', data.status || response.status);
   }
 
+  notifyLibraryChange(method, path);
   return data;
+}
+
+// Any successful write to the library broadcasts a window event, so the
+// level bar, stats and rank-ups refresh no matter which screen changed it.
+export const LIBRARY_CHANGED = 'mediavault:library-changed';
+function notifyLibraryChange(method, path) {
+  if (method !== 'GET' && path.startsWith('/library')) {
+    window.dispatchEvent(new Event(LIBRARY_CHANGED));
+  }
 }
 
 // Thin convenience wrappers - these are what components actually call.
