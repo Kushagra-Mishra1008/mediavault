@@ -1,54 +1,215 @@
 /* Tailwind's core styles - resets, base typography, and every utility
-   class (bg-*, flex, p-4, etc) all come from this one import in v4.
-   Order matters: this must come before your own rules. */
+   class all come from this one import in v4. Fonts are loaded from
+   index.html so they download in parallel with the bundle. */
 @import "tailwindcss";
 
-/* Google Fonts - three faces for three jobs, per the card-catalog plan:
-   Bebas Neue = titles, Source Sans 3 = body copy, JetBrains Mono =
-   metadata (ratings, dates) - the "stamped receipt" feel for numbers.
-   Swapped Source Sans 3 in for Inter to match the Stitch mockups. */
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
-/* @theme is Tailwind v4's config mechanism - a plain CSS block instead
-   of a JS file. Anything named --color-X here generates bg-X/text-X/
-   border-X utilities automatically. Same idea for --font-X generating
-   font-X utilities. This is the ONLY place the palette/fonts live -
-   change a hex here and every component using bg-movie updates. */
+/* Palette + fonts live here and nowhere else. Every --color-X generates
+   bg-X/text-X/border-X utilities; every --font-X a font-X utility. */
 @theme {
-  /* Base palette */
-  --color-paper: #F7F3EA;
-  --color-ink: #1B2432;
+  /* Surfaces, darkest to lightest */
+  --color-void: #07080c;
+  --color-panel: #0e1017;
+  --color-raised: #151823;
+  --color-edge: #232736;
 
-  /* Genre accents - act like stickers on a physical case. Confirmed
-     against the Stitch mockups - movie/ink hex values matched exactly. */
-  --color-movie: #D97706;
-  --color-series: #0D9488;
-  --color-anime: #DB2777;
-  --color-game: #7C3AED;
+  /* Text */
+  --color-fg: #eef0f6;
+  --color-muted: #8b91a5;
+  --color-faint: #565c70;
 
-  /* New - the ink-stamp motif (COMPLETED stamps, date stamps) recurs
-     across nearly every mockup screen. Placeholder red, adjust once we
-     see it rendered for real. */
-  --color-stamp: #B91C1C;
+  /* Brand accent (the "selected" red) + a cool secondary for highlights */
+  --color-accent: #ff2e55;
+  --color-accent-soft: #ff6b85;
+  --color-cyan: #38d9f5;
 
-  /* Overriding Tailwind's built-in font-sans and font-mono utilities
-     directly, rather than inventing new names, so every default text
-     element (which already uses font-sans as its base) picks these up
-     with zero extra classes needed. */
-  --font-sans: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* Media-type identity colors - checked for color-blind separation on
+     the dark surface. Always paired with an icon + label, never alone. */
+  --color-movie: #d9961a;
+  --color-series: #2f9fd8;
+  --color-anime: #e0508a;
+  --color-game: #9170f0;
 
-  /* Display is genuinely new - no Tailwind default to override - so
-     this one DOES need an explicit font-display class wherever you
-     use it (card titles, headers). */
-  --font-display: "Bebas Neue", sans-serif;
+  --color-danger: #f0435a;
+  --color-success: #34d399;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Chakra Petch", "Inter", sans-serif;
+  /* Pixel font for the mascots' world: speech bubbles, levels, name tags */
+  --font-pixel: "Silkscreen", ui-monospace, monospace;
+
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* @layer base = Tailwind's spot for global element defaults, applied
-   before any utility classes, so utilities can still override them
-   per-element without a specificity fight. */
 @layer base {
-  body {
-    @apply bg-paper text-ink font-sans;
+  html {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
   }
+  body {
+    @apply bg-void text-fg font-sans antialiased;
+    min-height: 100dvh;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-cyan);
+    outline-offset: 2px;
+  }
+  /* Thin themed scrollbars instead of the chunky OS default */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-edge) transparent;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+  }
+}
+
+/* Angled "cut corner" silhouette used on buttons and badges - the
+   signature game-HUD shape. Only on filled elements, since clip-path
+   would slice through a border. */
+@utility clip-cut {
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+@utility clip-cut-sm {
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+/* HUD label - tiny, tracked-out uppercase used for eyebrows and meta */
+@utility hud-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* Buttons/fields are @utility (not @layer components) so they can be
+   composed with @apply and still take variants like hover:. */
+@utility btn {
+  @apply relative inline-flex items-center justify-center gap-2 font-display font-semibold uppercase tracking-[0.12em] text-xs select-none
+    transition-[background-color,border-color,color,scale,opacity] duration-200 ease-(--ease-snap)
+    active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none;
+}
+@utility btn-primary {
+  @apply btn clip-cut bg-accent text-white px-5 h-11 overflow-hidden hover:bg-accent-soft;
+  /* Light sweep across the button on hover - transform only, so it's
+     composited and never triggers layout. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.35) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 0.6s var(--ease-snap);
+    pointer-events: none;
+  }
+  &:hover::after {
+    transform: translateX(120%);
+  }
+}
+@utility btn-ghost {
+  @apply btn px-4 h-11 rounded-lg text-muted hover:text-fg hover:bg-white/[0.05];
+}
+@utility btn-outline {
+  @apply btn px-4 h-11 rounded-lg border border-white/10 text-fg/80 hover:border-white/25 hover:text-fg hover:bg-white/[0.03];
+}
+@utility field {
+  @apply w-full h-11 rounded-lg bg-void/60 border border-white/[0.08] px-3.5 text-sm text-fg placeholder:text-faint
+    transition-[border-color,box-shadow] duration-200
+    hover:border-white/15 focus:outline-none focus:border-accent/70 focus:ring-4 focus:ring-accent/15;
+}
+
+/* Panels: flat fill + hairline border. No backdrop-filter - blur on
+   large scrolling surfaces is the #1 cause of scroll jank on weak GPUs. */
+@utility panel {
+  @apply bg-panel border border-white/[0.06] rounded-xl;
+}
+
+/* Skeleton shimmer - a moving gradient on a pseudo-element via transform,
+   so the placeholder animates without repainting its box. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-raised);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.05), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+
+/* Card entrance - CSS keyframes run off React entirely. `backwards`
+   keeps the card hidden during its stagger delay, then lets go once done
+   so the hover lift (also `translate`) works normally afterwards. */
+.card-in {
+  animation: card-in 0.45s var(--ease-snap) backwards;
+}
+@keyframes card-in {
+  from { opacity: 0; translate: 0 16px; }
+}
+
+/* ---------- Pixel sprites ----------
+   Idle bob is a 2-frame step animation (like a real sprite sheet), and
+   the blink just flips an overlay's opacity - both are compositor-only. */
+.sprite-bob {
+  animation: sprite-bob 1.1s steps(1) infinite;
+  animation-delay: var(--sprite-delay, 0s);
+}
+@keyframes sprite-bob {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -6.25%; }
+}
+.sprite-lid {
+  opacity: 0;
+  animation: sprite-blink 4.6s steps(1) infinite;
+  animation-delay: var(--sprite-delay, 0s);
+}
+@keyframes sprite-blink {
+  0% { opacity: 0; }
+  93% { opacity: 1; }
+  96% { opacity: 0; }
+}
+
+/* Pixel speech bubble with a stepped (non-rounded) border and tail */
+.pixel-bubble {
+  position: relative;
+  background: var(--color-fg);
+  color: var(--color-void);
+  font-family: var(--font-pixel);
+  box-shadow:
+    0 -3px 0 0 var(--color-fg), 0 3px 0 0 var(--color-fg),
+    -3px 0 0 0 var(--color-fg), 3px 0 0 0 var(--color-fg),
+    0 6px 0 0 rgb(0 0 0 / 0.35);
+}
+.pixel-bubble::after {
+  content: "";
+  position: absolute;
+  left: var(--tail-x, 18px);
+  bottom: -9px;
+  width: 9px;
+  height: 9px;
+  background: var(--color-fg);
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Reserve scrollbar space so locking scroll (modals) never shifts layout */
+html {
+  scrollbar-gutter: stable;
 }
