@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, LazyMotion, MotionConfig, domMax, m } from 'motion/react';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { VaultProvider } from './context/VaultContext';
 import LoginPage from './pages/LoginPage';
 import LibraryPage from './pages/LibraryPage';
 import StatsPage from './pages/StatsPage';
@@ -76,31 +77,33 @@ function AppContent() {
           </m.div>
         ) : (
           <m.div key="app" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.4 } }}>
-            <Shell
-              activeView={activeView}
-              onNavigate={navigate}
-              onAddNew={() => setShowAddModal(true)}
-              onLogout={handleLogout}
-            >
-              <AnimatePresence mode="wait">
-                <m.div key={activeView} {...pageMotion}>
-                  {activeView === 'library' && (
-                    <LibraryPage refreshKey={libraryRefreshKey} onAddNew={() => setShowAddModal(true)} />
-                  )}
-                  {activeView === 'stats' && <StatsPage />}
-                  {activeView === 'recommendations' && <RecommendationsPage />}
-                </m.div>
-              </AnimatePresence>
-            </Shell>
+            <VaultProvider>
+              <Shell
+                activeView={activeView}
+                onNavigate={navigate}
+                onAddNew={() => setShowAddModal(true)}
+                onLogout={handleLogout}
+              >
+                <AnimatePresence mode="wait">
+                  <m.div key={activeView} {...pageMotion}>
+                    {activeView === 'library' && (
+                      <LibraryPage refreshKey={libraryRefreshKey} onAddNew={() => setShowAddModal(true)} />
+                    )}
+                    {activeView === 'stats' && <StatsPage />}
+                    {activeView === 'recommendations' && <RecommendationsPage />}
+                  </m.div>
+                </AnimatePresence>
+              </Shell>
 
-            <AddEntryModal
-              open={showAddModal}
-              onClose={closeAddModal}
-              onSuccess={() => {
-                setShowAddModal(false);
-                setLibraryRefreshKey((k) => k + 1);
-              }}
-            />
+              <AddEntryModal
+                open={showAddModal}
+                onClose={closeAddModal}
+                onSuccess={() => {
+                  setShowAddModal(false);
+                  setLibraryRefreshKey((k) => k + 1);
+                }}
+              />
+            </VaultProvider>
           </m.div>
         )}
       </AnimatePresence>

@@ -2,6 +2,10 @@ import { m } from 'motion/react';
 import { Library, ChartColumn, Sparkles, Plus, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Logo, Wordmark } from './ui';
+import { useVault } from '../context/VaultContext';
+import { progressFor } from '../lib/progress';
+import Companion from './Companion';
+import Sprite from './Sprite';
 
 const NAV_ITEMS = [
   { key: 'library', label: 'Library', icon: Library, hotkey: '1' },
@@ -15,6 +19,8 @@ const ease = [0.22, 1, 0.36, 1];
 // Navigation/add/logout state is lifted to App.jsx.
 export default function Shell({ activeView, onNavigate, onAddNew, onLogout, children }) {
   const { user } = useAuth();
+  const { stats } = useVault();
+  const progress = stats ? progressFor(stats) : null;
   const initial = user.username.charAt(0).toUpperCase();
 
   return (
@@ -70,16 +76,37 @@ export default function Shell({ activeView, onNavigate, onAddNew, onLogout, chil
           })}
         </nav>
 
-        <div className="mt-auto p-3">
+        <div className="mt-auto pb-3 [@media(max-height:720px)]:hidden">
+          <Companion key={activeView} view={activeView} />
+        </div>
+
+        <div className="p-3 pt-0">
           <div className="flex items-center gap-3 rounded-xl bg-void/60 border border-white/[0.06] p-2.5">
-            <div className="clip-cut-sm size-9 shrink-0 grid place-items-center bg-gradient-to-br from-accent to-game font-display font-bold">
+            <div className="relative clip-cut-sm size-9 shrink-0 grid place-items-center bg-gradient-to-br from-accent to-game font-display font-bold">
               {initial}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium truncate">{user.username}</p>
-              <p className="text-[11px] text-success flex items-center gap-1">
-                <span className="size-1.5 rounded-full bg-success" /> Online
-              </p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-sm font-medium truncate">{user.username}</p>
+                {progress && <span className="font-pixel text-[9px] text-movie shrink-0">LV{progress.level}</span>}
+              </div>
+              {progress ? (
+                <div title={`${progress.into} / ${progress.needed} XP to Lv ${progress.level + 1}`}>
+                  <p className="text-[11px] text-muted">{progress.rank}</p>
+                  <div className="mt-1 h-1 rounded-full bg-white/[0.07] overflow-hidden">
+                    <m.div
+                      className="h-full bg-gradient-to-r from-movie to-accent origin-left"
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: progress.pct }}
+                      transition={{ duration: 0.8, ease }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-success flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-success" /> Online
+                </p>
+              )}
             </div>
             <button
               onClick={onLogout}
@@ -104,13 +131,21 @@ export default function Shell({ activeView, onNavigate, onAddNew, onLogout, chil
           <Logo size={26} />
           <Wordmark className="text-base" />
         </div>
-        <button
-          onClick={onLogout}
-          aria-label="Log out"
-          className="size-9 grid place-items-center rounded-lg text-muted hover:text-danger transition-colors"
-        >
-          <LogOut size={17} />
-        </button>
+        <div className="flex items-center gap-1">
+          {progress && (
+            <span className="flex items-center gap-1.5 font-pixel text-[10px] text-movie pr-1">
+              <Sprite name="vaulty" size={24} bob={false} />
+              LV{progress.level}
+            </span>
+          )}
+          <button
+            onClick={onLogout}
+            aria-label="Log out"
+            className="size-9 grid place-items-center rounded-lg text-muted hover:text-danger transition-colors"
+          >
+            <LogOut size={17} />
+          </button>
+        </div>
       </m.header>
 
       {/* ---------- Content ---------- */}

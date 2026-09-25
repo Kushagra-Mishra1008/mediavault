@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { m } from 'motion/react';
-import { Search, Star, Plus, Ghost, SearchX, X } from 'lucide-react';
+import { Search, Star, Plus, X } from 'lucide-react';
 import { apiGet } from '../api/client';
 import { STATUSES, STATUS_KEYS, TYPES, TYPE_KEYS, typeMeta } from '../lib/media';
 import { PageHeader, StatusBadge, TypeBadge, EmptyState, Poster } from '../components/ui';
@@ -159,15 +159,15 @@ export default function LibraryPage({ refreshKey, onAddNew }) {
       ) : error ? (
         <p className="panel p-4 text-sm text-danger">{error}</p>
       ) : entries.length === 0 ? (
-        <EmptyState icon={Ghost} title="Your vault is empty">
-          <p>Add your first movie, show, anime or game to get started.</p>
+        <EmptyState sprite="vaulty" title="Your vault is empty">
+          <p>Vaulty is hungry. Add your first movie, show, anime or game.</p>
           <button onClick={onAddNew} className="btn-primary mt-6">
             <Plus size={15} strokeWidth={2.5} /> Add First Entry
           </button>
         </EmptyState>
       ) : filteredEntries.length === 0 ? (
-        <EmptyState icon={SearchX} title="Nothing matches">
-          <p>Try another search or clear your filters.</p>
+        <EmptyState sprite="telly" title="No signal">
+          <p>Telly couldn't find anything matching that. Try another search or clear the filters.</p>
           <button onClick={clearFilters} className="btn-outline mt-6">Clear filters</button>
         </EmptyState>
       ) : (
@@ -213,6 +213,7 @@ function MediaCard({ entry, index, onOpen }) {
         <Poster
           src={mediaItem.imageUrl}
           type={mediaItem.type}
+          spriteSize={80}
           className="group-hover:scale-105"
         />
 

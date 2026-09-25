@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { AnimatePresence, m } from 'motion/react';
 import { User, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { TYPES, TYPE_KEYS } from '../lib/media';
+import { TYPES } from '../lib/media';
+import Sprite, { SpeechBubble } from '../components/Sprite';
 import { Logo, Wordmark, Spinner } from '../components/ui';
 
 const ease = [0.22, 1, 0.36, 1];
@@ -33,6 +34,8 @@ export default function LoginPage({ onAuthenticated }) {
   // Bumped on every failed attempt so the error shake replays each time.
   const [errorCount, setErrorCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  // Which of Vaulty's login lines is showing; clicking Vaulty advances it.
+  const [line, setLine] = useState(0);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -51,6 +54,7 @@ export default function LoginPage({ onAuthenticated }) {
       // err.message is exactly what GlobalExceptionHandler sent back.
       setError(err.message);
       setErrorCount((c) => c + 1);
+      setLine(-1); // Vaulty reacts to the failed attempt
       setSubmitting(false);
     }
   }
@@ -90,17 +94,8 @@ export default function LoginPage({ onAuthenticated }) {
             Track the movies, series, anime and games you&apos;ve finished, the ones you&apos;re in the middle of, and what to play next.
           </m.p>
 
-          <m.div variants={rise} className="grid grid-cols-4 gap-3 mt-10 max-w-md">
-            {TYPE_KEYS.map((key) => {
-              const meta = TYPES[key];
-              const Icon = meta.icon;
-              return (
-                <div key={key} className="panel flex flex-col items-center gap-2 py-4">
-                  <Icon size={22} className={meta.text} />
-                  <span className="hud-label text-[10px] text-muted">{meta.label}</span>
-                </div>
-              );
-            })}
+          <m.div variants={rise} className="mt-10">
+            <PartyLineup line={line} onPoke={() => setLine((l) => l + 1)} />
           </m.div>
         </div>
 
@@ -117,9 +112,16 @@ export default function LoginPage({ onAuthenticated }) {
           transition={{ duration: 0.6, ease, delay: 0.15 }}
           className="w-full max-w-md"
         >
-          <div className="lg:hidden flex items-center justify-center gap-3 mb-10">
-            <Logo size={34} />
-            <Wordmark className="text-xl" />
+          <div className="lg:hidden flex flex-col items-center gap-5 mb-8">
+            <div className="flex items-center gap-3">
+              <Logo size={34} />
+              <Wordmark className="text-xl" />
+            </div>
+            <div className="flex items-end gap-3">
+              {PARTY.map((p, i) => (
+                <Sprite key={p.sprite} name={p.sprite} size={40} delay={i * 0.27} />
+              ))}
+            </div>
           </div>
 
           <div className="panel relative overflow-hidden p-7 sm:p-9 shadow-2xl shadow-black/40">
@@ -260,5 +262,59 @@ function IconField({ icon: Icon, label, children }) {
         {children}
       </span>
     </label>
+  );
+}
+
+const PARTY = [
+  { sprite: 'reel', type: 'MOVIE' },
+  { sprite: 'telly', type: 'SERIES' },
+  { sprite: 'kit', type: 'ANIME' },
+  { sprite: 'pip', type: 'GAME' },
+];
+
+const VAULTY_LINES = [
+  "Psst. Sign in. I've been guarding your stuff.",
+  "The crew's been waiting for you.",
+  'Reel saved you a seat.',
+  'Pip already pressed start. Hurry.',
+];
+
+// The cast on the login screen: Vaulty talking, the four type mascots
+// lined up on a pixel floor, each bobbing slightly out of step.
+function PartyLineup({ line, onPoke }) {
+  const text = line < 0 ? "Hmm, that key didn't fit. Try again?" : VAULTY_LINES[line % VAULTY_LINES.length];
+  return (
+    <div className="max-w-md">
+      <div className="flex items-end gap-4">
+        <button type="button" onClick={onPoke} aria-label="Poke Vaulty" className="shrink-0 cursor-pointer">
+          <Sprite name="vaulty" size={80} hop={line} />
+        </button>
+        <AnimatePresence mode="wait">
+          <m.div
+            key={text}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            className="mb-12"
+          >
+            <SpeechBubble tail={10} className="text-[11px]">{text}</SpeechBubble>
+          </m.div>
+        </AnimatePresence>
+      </div>
+
+      <div className="relative mt-6 grid grid-cols-4 gap-2">
+        {PARTY.map((p, i) => {
+          const meta = TYPES[p.type];
+          return (
+            <div key={p.sprite} className="relative flex flex-col items-center">
+              <Sprite name={p.sprite} size={64} delay={i * 0.27} />
+              <span className={`font-pixel text-[10px] mt-2 ${meta.text}`}>{meta.label}</span>
+            </div>
+          );
+        })}
+        {/* pixel floor */}
+        <div aria-hidden="true" className="absolute left-0 right-0 top-[62px] h-1 bg-[repeating-linear-gradient(90deg,var(--color-edge)_0_8px,transparent_8px_12px)]" />
+      </div>
+    </div>
   );
 }

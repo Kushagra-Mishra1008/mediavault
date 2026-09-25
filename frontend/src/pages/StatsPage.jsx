@@ -4,6 +4,11 @@ import { Layers, Star, Trophy, Play, Clock } from 'lucide-react';
 import { apiGet } from '../api/client';
 import { STATUSES, STATUS_KEYS, TYPES, TYPE_KEYS } from '../lib/media';
 import { PageHeader, CountUp, TypeBadge, StatusBadge, Poster } from '../components/ui';
+import Sprite from '../components/Sprite';
+import { useAuth } from '../context/AuthContext';
+import { useVault } from '../context/VaultContext';
+import { SPRITES, TYPE_SPRITE } from '../lib/sprites';
+import { ACHIEVEMENTS, XP_BY_STATUS, favoriteType, progressFor, unlockedAchievements } from '../lib/progress';
 
 const ease = [0.22, 1, 0.36, 1];
 
@@ -15,26 +20,22 @@ const tile = {
 };
 
 export default function StatsPage() {
-  const [stats, setStats] = useState(null);
+  // Stats come from VaultProvider (shared with the sidebar XP bar);
+  // only the recent-adds strip is fetched here.
+  const { stats, error } = useVault();
   const [recent, setRecent] = useState([]);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
-    // Independent requests, fetched in parallel.
-    Promise.all([apiGet('/stats'), apiGet('/library?size=4&sort=addedAt,desc')])
-      .then(([statsData, recentData]) => {
-        if (cancelled) return;
-        setStats(statsData);
-        setRecent(recentData.content);
-      })
-      .catch((err) => !cancelled && setError(err.message));
+    apiGet('/library?size=4&sort=addedAt,desc')
+      .then((data) => !cancelled && setRecent(data.content))
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
   return (
     <div>
-      <PageHeader index="02" eyebrow="Player Profile" title="Stats" subtitle="How your collection breaks down." />
+      <PageHeader index="02" eyebrow="Player Profile" title="Stats" subtitle="Your level, your loot, your collection." />
       {error ? (
         <p className="panel p-4 text-sm text-danger">{error}</p>
       ) : !stats ? (
@@ -58,6 +59,8 @@ function StatsContent({ stats, recent }) {
 
   return (
     <m.div variants={grid} initial="initial" animate="animate" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <PlayerCard stats={stats} />
+
       {/* ---------- KPI tiles ---------- */}
       <KpiTile icon={Layers} label="Total Titles" accent="text-accent">
         <CountUp value={total} />
@@ -166,6 +169,8 @@ function StatsContent({ stats, recent }) {
         </div>
       </m.section>
 
+      <Achievements stats={stats} />
+
       {/* ---------- Recently added ---------- */}
       <m.section variants={tile} className="panel p-5 sm:p-6 col-span-2 lg:col-span-4">
         <h2 className="hud-label text-muted mb-5 flex items-center gap-2">
@@ -178,7 +183,7 @@ function StatsContent({ stats, recent }) {
             {recent.map((entry) => (
               <div key={entry.id} className="flex gap-3 rounded-lg bg-void/50 border border-white/[0.05] p-2.5">
                 <div className="w-14 aspect-[2/3] shrink-0 rounded-md overflow-hidden bg-raised">
-                  <Poster src={entry.mediaItem.imageUrl} type={entry.mediaItem.type} iconSize={20} />
+                  <Poster src={entry.mediaItem.imageUrl} type={entry.mediaItem.type} spriteSize={32} />
                 </div>
                 <div className="min-w-0 flex flex-col justify-center gap-1.5">
                   <p className="font-display font-semibold leading-tight line-clamp-2">{entry.mediaItem.title}</p>
@@ -193,6 +198,88 @@ function StatsContent({ stats, recent }) {
         )}
       </m.section>
     </m.div>
+  );
+}
+
+function PlayerCard({ stats }) {
+  const { user } = useAuth();
+  const progress = progressFor(stats);
+  const main = favoriteType(stats);
+  const mainSprite = main ? TYPE_SPRITE[main] : 'vaulty';
+  return (
+    <m.section variants={tile} className="panel relative overflow-hidden col-span-2 lg:col-span-4 p-5 sm:p-7">
+      <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_15%_60%,rgb(255_46_85/0.14),transparent_55%)]" />
+      <div className="relative flex flex-col sm:flex-row sm:items-center gap-6">
+        <div className="flex flex-col items-center shrink-0">
+          <Sprite name={mainSprite} size={96} />
+          <div aria-hidden="true" className="h-1.5 w-24 -mt-0.5 bg-[repeating-linear-gradient(90deg,var(--color-edge)_0_8px,transparent_8px_12px)]" />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="font-display text-2xl sm:text-3xl font-bold truncate">{user.username}</h2>
+            <span className="clip-cut-sm bg-movie text-void font-pixel text-xs px-2.5 py-1">LV {progress.level}</span>
+            <span className="hud-label text-accent">{progress.rank}</span>
+          </div>
+          <p className="text-sm text-muted mt-1">
+            {main
+              ? <>Main: <span className={TYPES[main].text}>{TYPES[main].label}</span> &middot; {SPRITES[mainSprite].name} is your spirit mascot.</>
+              : 'Add a title to pick your spirit mascot.'}
+          </p>
+          <div className="mt-4 max-w-xl">
+            <div className="flex justify-between font-pixel text-[10px] text-muted mb-1.5">
+              <span>XP <CountUp value={progress.xp} /></span>
+              <span>{progress.needed - progress.into} to LV {progress.level + 1}</span>
+            </div>
+            {/* Segmented XP bar, filled with a transform so it's composited */}
+            <div className="relative h-3 bg-white/[0.06] overflow-hidden clip-cut-sm">
+              <m.div
+                className="absolute inset-0 origin-left bg-gradient-to-r from-movie via-accent-soft to-accent"
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: progress.pct }}
+                transition={{ duration: 1, ease, delay: 0.2 }}
+              />
+              <div aria-hidden="true" className="absolute inset-0 bg-[repeating-linear-gradient(90deg,transparent_0_14px,var(--color-panel)_14px_16px)]" />
+            </div>
+            <p className="text-xs text-faint mt-2">
+              +{XP_BY_STATUS.COMPLETED} XP per completion · +{XP_BY_STATUS.IN_PROGRESS} in progress · +{XP_BY_STATUS.PLANNED} planned
+            </p>
+          </div>
+        </div>
+      </div>
+    </m.section>
+  );
+}
+
+function Achievements({ stats }) {
+  const unlocked = unlockedAchievements(stats);
+  return (
+    <m.section variants={tile} className="panel p-5 sm:p-6 col-span-2 lg:col-span-4">
+      <div className="flex items-baseline justify-between mb-5">
+        <h2 className="hud-label text-muted">Achievements</h2>
+        <span className="font-pixel text-[10px] text-movie">{unlocked.size}/{ACHIEVEMENTS.length}</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {ACHIEVEMENTS.map((a) => {
+          const got = unlocked.has(a.id);
+          return (
+            <div
+              key={a.id}
+              className={`flex items-center gap-3 rounded-lg border p-3 ${got ? 'border-movie/30 bg-movie/[0.06]' : 'border-white/[0.05] bg-void/50'}`}
+            >
+              {/* Locked ones show as a silhouette */}
+              <div className={got ? '' : 'brightness-0 opacity-25'}>
+                <Sprite name={a.sprite} size={40} bob={false} />
+              </div>
+              <div className="min-w-0">
+                <p className={`font-display font-semibold text-sm leading-tight ${got ? '' : 'text-muted'}`}>{got ? a.name : '???'}</p>
+                <p className="text-[11px] text-faint mt-0.5 leading-snug">{a.desc}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </m.section>
   );
 }
 
@@ -227,6 +314,7 @@ function RatingMeter({ value }) {
 function StatsSkeleton() {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="skeleton h-44 rounded-xl col-span-2 lg:col-span-4" />
       {Array.from({ length: 4 }, (_, i) => (
         <div key={i} className="skeleton h-32 rounded-xl" />
       ))}

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, animate, m, useReducedMotion } from 'motion/react';
 import { X } from 'lucide-react';
 import { STATUSES, STATUS_KEYS, TYPES, TYPE_KEYS, typeMeta } from '../lib/media';
+import { TYPE_SPRITE } from '../lib/sprites';
+import Sprite from './Sprite';
 
 export function Logo({ size = 32 }) {
   return (
@@ -265,12 +267,10 @@ export function Spinner({ size = 16 }) {
   );
 }
 
-export function EmptyState({ icon: Icon, title, children }) {
+export function EmptyState({ sprite = 'vaulty', title, children }) {
   return (
-    <div className="panel border-dashed flex flex-col items-center text-center py-16 px-6">
-      <div className="size-14 grid place-items-center rounded-xl bg-accent/10 text-accent mb-4">
-        <Icon size={26} />
-      </div>
+    <div className="panel border-dashed flex flex-col items-center text-center py-14 px-6">
+      <Sprite name={sprite} size={80} className="mb-5" />
       <p className="font-display text-lg font-semibold">{title}</p>
       <div className="text-sm text-muted mt-1 max-w-sm">{children}</div>
     </div>
@@ -278,15 +278,15 @@ export function EmptyState({ icon: Icon, title, children }) {
 }
 
 // Poster art with lazy loading, a fade-in once decoded (no line-by-line
-// pop-in), and a type-icon fallback when there's no URL or it 404s.
-export function Poster({ src, type, iconSize = 48, className = '' }) {
+// pop-in), and a mascot fallback when there's no URL or it 404s.
+export function Poster({ src, type, spriteSize = 64, className = '' }) {
   const [failed, setFailed] = useState(false);
-  const meta = typeMeta(type);
-  const Icon = meta.icon;
   if (!src || failed) {
+    // No art? The type's mascot stands in, on a soft spotlight.
+    const sprite = TYPE_SPRITE[type?.toUpperCase()] ?? 'vaulty';
     return (
-      <div className="size-full grid place-items-center bg-gradient-to-br from-raised to-void">
-        <Icon size={iconSize} strokeWidth={1.25} className={`${meta.text} opacity-40`} />
+      <div className="size-full grid place-items-center bg-[radial-gradient(circle_at_50%_45%,var(--color-raised),var(--color-void)_75%)]">
+        <Sprite name={sprite} size={spriteSize} bob={false} />
       </div>
     );
   }

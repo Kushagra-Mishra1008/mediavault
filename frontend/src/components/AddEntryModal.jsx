@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
 import { apiPost } from '../api/client';
 import { findOrCreateMediaItem } from '../lib/media';
+import { XP_BY_STATUS } from '../lib/progress';
 import { Modal, FieldLabel, TypePicker, StatusPicker, RatingInput, Spinner } from './ui';
 
 // onClose - closes with no side effects. onSuccess - called only after a
@@ -33,7 +34,7 @@ function AddEntryForm({ onClose, onSuccess }) {
     try {
       const mediaItemId = await findOrCreateMediaItem({ title: title.trim(), type });
       const entry = await apiPost('/library', { mediaItemId, status, rating, notes });
-      toast.success(`${entry.mediaItem.title} added to your vault`);
+      toast.success(`${entry.mediaItem.title} added to your vault`, { description: `+${XP_BY_STATUS[status]} XP` });
       onSuccess(entry);
     } catch (err) {
       setError(err.message);

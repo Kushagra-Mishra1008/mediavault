@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { AnimatePresence, m } from 'motion/react';
 import { toast } from 'sonner';
-import { Sparkles, Plus, Check, X, RefreshCw, Wand2 } from 'lucide-react';
+import { Sparkles, Plus, Check, X, RefreshCw } from 'lucide-react';
 import { apiGet, apiPost } from '../api/client';
-import { findOrCreateMediaItem, typeMeta } from '../lib/media';
+import { findOrCreateMediaItem } from '../lib/media';
+import { TYPE_SPRITE } from '../lib/sprites';
+import { XP_BY_STATUS } from '../lib/progress';
+import Sprite, { SpeechBubble } from '../components/Sprite';
 import { PageHeader, TypeBadge, Spinner } from '../components/ui';
 
 const ease = [0.22, 1, 0.36, 1];
@@ -44,7 +47,7 @@ export default function RecommendationsPage() {
       const mediaItemId = await findOrCreateMediaItem({ title: rec.title, type, description: rec.reason });
       await apiPost('/library', { mediaItemId, status: 'PLANNED', rating: null, notes: '' });
       setAddedTitles((prev) => new Set(prev).add(rec.title));
-      toast.success(`${rec.title} added to Planned`);
+      toast.success(`${rec.title} added to Planned`, { description: `+${XP_BY_STATUS.PLANNED} XP` });
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -89,6 +92,7 @@ export default function RecommendationsPage() {
         <ThinkingGrid />
       ) : visible.length === 0 ? (
         <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="panel border-dashed text-center py-14 px-6">
+          <Sprite name="kit" size={72} className="mb-4" />
           <p className="font-display text-lg font-semibold">All caught up</p>
           <p className="text-sm text-muted mt-1">You&apos;ve reviewed every pick. Reroll for a fresh batch.</p>
           <button onClick={handleGenerate} className="btn-primary mt-6">
@@ -118,8 +122,6 @@ export default function RecommendationsPage() {
 }
 
 function RecCard({ rec, index, added, adding, onAdd, onDismiss }) {
-  const meta = typeMeta(rec.type);
-  const Icon = meta.icon;
   return (
     <m.article
       layout
@@ -129,8 +131,10 @@ function RecCard({ rec, index, added, adding, onAdd, onDismiss }) {
       transition={{ layout: { type: 'spring', stiffness: 400, damping: 36 } }}
       className="panel group relative overflow-hidden p-5 flex flex-col"
     >
-      {/* Oversized faded type icon as card art */}
-      <Icon aria-hidden="true" size={120} strokeWidth={1} className={`absolute -right-6 -top-6 ${meta.text} opacity-[0.07] transition-transform duration-500 group-hover:rotate-6 group-hover:scale-110`} />
+      {/* The type's mascot sits in the corner and hops up on hover */}
+      <div aria-hidden="true" className="absolute right-12 top-2.5 transition-[translate] duration-300 ease-(--ease-snap) group-hover:-translate-y-1.5">
+        <Sprite name={TYPE_SPRITE[rec.type?.toUpperCase()] ?? 'vaulty'} size={48} bob={false} />
+      </div>
 
       <div className="relative flex items-start justify-between gap-3">
         <TypeBadge type={rec.type} />
@@ -144,7 +148,7 @@ function RecCard({ rec, index, added, adding, onAdd, onDismiss }) {
         </button>
       </div>
 
-      <h3 className="relative font-display text-xl font-bold leading-tight mt-4">{rec.title}</h3>
+      <h3 className="relative font-display text-xl font-bold leading-tight mt-4 pr-14">{rec.title}</h3>
       <p className="relative text-sm text-muted leading-relaxed mt-2 flex-1">{rec.reason}</p>
 
       <button
@@ -169,8 +173,13 @@ function GeneratePrompt({ onGenerate }) {
     >
       <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgb(255_46_85/0.12),transparent_60%)]" />
       <div className="relative">
-        <div className="mx-auto size-16 grid place-items-center clip-cut bg-accent/15 text-accent">
-          <Wand2 size={28} />
+        <div className="flex items-end justify-center gap-2">
+          <Sprite name="reel" size={48} delay={0.3} />
+          <div className="flex flex-col items-center gap-3">
+            <SpeechBubble tail={34}>Let me cook.</SpeechBubble>
+            <Sprite name="vaulty" size={80} />
+          </div>
+          <Sprite name="pip" size={48} delay={0.6} />
         </div>
         <h2 className="font-display text-2xl sm:text-3xl font-bold mt-6">What should you play next?</h2>
         <p className="text-muted mt-2 max-w-md mx-auto">
@@ -187,9 +196,12 @@ function GeneratePrompt({ onGenerate }) {
 function ThinkingGrid() {
   return (
     <div>
-      <p className="flex items-center gap-2 text-sm text-muted mb-4">
-        <Spinner size={14} /> Scanning your vault for patterns…
-      </p>
+      <div className="flex items-end gap-3 mb-6">
+        <Sprite name="vaulty" size={56} className="[animation-duration:0.4s]" />
+        <SpeechBubble tail={14} className="mb-10">
+          Reading your ratings<span className="inline-block w-5 text-left animate-pulse">...</span>
+        </SpeechBubble>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {Array.from({ length: 6 }, (_, i) => (
           <div key={i} className="skeleton h-56 rounded-xl" style={{ animationDelay: `${i * 0.1}s` }} />
