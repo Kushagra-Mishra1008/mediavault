@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { apiPost, getToken, setToken, clearToken } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -19,30 +19,22 @@ function decodeToken(token) {
   }
 }
 
+// Reads an existing, unexpired token synchronously on first render, so
+// an already-authenticated user never sees a "logged out" frame or a
+// loading screen. exp is in seconds (JWT spec); Date.now() is ms.
+function readStoredUser() {
+  const token = getToken();
+  if (!token) return null;
+  const decoded = decodeToken(token);
+  if (decoded && decoded.exp * 1000 > Date.now()) {
+    return { username: decoded.sub };
+  }
+  clearToken();
+  return null;
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  // loading covers the brief window on first page load where we're
-  // checking localStorage for an existing token - without this, a
-  // protected route would flash "not logged in" for a frame even for
-  // an already-authenticated user, before the check finishes.
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = getToken();
-    if (token) {
-      const decoded = decodeToken(token);
-      // exp is in seconds since epoch (JWT spec); Date.now() is
-      // milliseconds - hence the *1000. If the token's expired, don't
-      // trust it even though it's sitting in storage.
-      if (decoded && decoded.exp * 1000 > Date.now()) {
-        setUser({ username: decoded.sub });
-      } else {
-        clearToken();
-      }
-    }
-    setLoading(false);
-  }, []);
-
+  const [user, setUser] = useState(readStoredUser);
   async function login(username, password) {
     const response = await apiPost('/auth/login', { username, password });
     setToken(response.token);
@@ -65,7 +57,6 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
-    loading,
     isAuthenticated: user !== null,
     login,
     register,
@@ -77,6 +68,7 @@ export function AuthProvider({ children }) {
 
 // Custom hook so components do `const { user, login } = useAuth()`
 // instead of importing useContext + AuthContext everywhere.
+// eslint-disable-next-line react-refresh/only-export-components -- hook lives beside its provider
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

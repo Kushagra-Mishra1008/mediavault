@@ -1,193 +1,237 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { m } from 'motion/react';
+import { Layers, Star, Trophy, Play, Clock } from 'lucide-react';
 import { apiGet } from '../api/client';
+import { STATUSES, STATUS_KEYS, TYPES, TYPE_KEYS } from '../lib/media';
+import { PageHeader, CountUp, TypeBadge, StatusBadge, Poster } from '../components/ui';
 
-const STATUS_LABELS = {
-  PLANNED: 'Planned',
-  IN_PROGRESS: 'In Progress',
-  COMPLETED: 'Completed',
-  DROPPED: 'Dropped',
-};
+const ease = [0.22, 1, 0.36, 1];
 
-const TYPE_COLORS = {
-  MOVIE: 'bg-movie',
-  SERIES: 'bg-series',
-  ANIME: 'bg-anime',
-  GAME: 'bg-game',
+// Tiles cascade in one after another.
+const grid = { animate: { transition: { staggerChildren: 0.06 } } };
+const tile = {
+  initial: { opacity: 0, y: 16 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.45, ease } },
 };
 
 export default function StatsPage() {
   const [stats, setStats] = useState(null);
-  const [recentEntry, setRecentEntry] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [recent, setRecent] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    async function loadStats() {
-      try {
-        // Two independent requests, fetched in parallel with
-        // Promise.all rather than one after another - they don't depend
-        // on each other's results, so there's no reason to make the
-        // user wait for both round-trips sequentially.
-        const [statsData, recentData] = await Promise.all([
-          apiGet('/stats'),
-          apiGet('/library?size=1&sort=addedAt,desc'),
-        ]);
+    let cancelled = false;
+    // Independent requests, fetched in parallel.
+    Promise.all([apiGet('/stats'), apiGet('/library?size=4&sort=addedAt,desc')])
+      .then(([statsData, recentData]) => {
+        if (cancelled) return;
         setStats(statsData);
-        // .content[0] may not exist if the library is completely empty -
-        // handled with ?. below rather than assuming it's always there.
-        setRecentEntry(recentData.content[0] ?? null);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadStats();
+        setRecent(recentData.content);
+      })
+      .catch((err) => !cancelled && setError(err.message));
+    return () => { cancelled = true; };
   }, []);
-
-  if (loading) {
-    return <p className="font-mono text-sm text-ink/50">Loading statistics...</p>;
-  }
-
-  if (error) {
-    return <p className="font-mono text-sm text-stamp">{error}</p>;
-  }
-
-  // byType/byStatus only contain keys that actually have entries (see
-  // the GROUP BY comment in LibraryEntryRepository) - defaulting to 0
-  // here means every type/status always renders a row, even at zero,
-  // rather than the breakdown silently shrinking as categories empty out.
-  const typeEntries = ['MOVIE', 'SERIES', 'ANIME', 'GAME'].map((type) => ({
-    type,
-    count: stats.byType[type] ?? 0,
-  }));
-
-  const statusEntries = Object.keys(STATUS_LABELS).map((status) => ({
-    status,
-    label: STATUS_LABELS[status],
-    count: stats.byStatus[status] ?? 0,
-  }));
-
-  // Mockup shows a 5-star scale next to the /10 number - averageRating
-  // is on a 1-10 scale, so /2 converts to a 5-star equivalent for the
-  // filled-star count.
-  const filledStars = stats.averageRating ? Math.round(stats.averageRating / 2) : 0;
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="font-display text-3xl text-ink tracking-wide">LIBRARY STATISTICS</h2>
-        <p className="font-mono text-xs text-ink/40 mt-1">
-          Detailed breakdown of your curated collection.
-        </p>
-      </div>
+      <PageHeader index="02" eyebrow="Player Profile" title="Stats" subtitle="How your collection breaks down." />
+      {error ? (
+        <p className="panel p-4 text-sm text-danger">{error}</p>
+      ) : !stats ? (
+        <StatsSkeleton />
+      ) : (
+        <StatsContent stats={stats} recent={recent} />
+      )}
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+function StatsContent({ stats, recent }) {
+  const total = stats.totalEntries;
+  // byType/byStatus only contain keys that have entries - default to 0
+  // so every row always renders, even when empty.
+  const typeCount = (t) => stats.byType[t] ?? 0;
+  const statusCount = (s) => stats.byStatus[s] ?? 0;
+  const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
+  const completionRate = pct(statusCount('COMPLETED'));
+  const maxType = Math.max(1, ...TYPE_KEYS.map(typeCount));
 
-        {/* Catalog Total */}
-        <div className="bg-white border-2 border-ink/10 p-5">
-          <span className="inline-block bg-ink text-paper font-mono text-[10px] uppercase px-2 py-0.5 mb-3">
-            Summary
-          </span>
-          <p className="font-display text-5xl text-ink">{stats.totalEntries}</p>
-          <p className="font-mono text-xs text-ink/50 mt-2">
-            Individual media items tracked in private storage.
-          </p>
+  return (
+    <m.div variants={grid} initial="initial" animate="animate" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* ---------- KPI tiles ---------- */}
+      <KpiTile icon={Layers} label="Total Titles" accent="text-accent">
+        <CountUp value={total} />
+      </KpiTile>
+
+      <KpiTile icon={Star} label="Avg Rating" accent="text-movie">
+        {stats.averageRating ? (
+          <>
+            <CountUp value={stats.averageRating} decimals={1} />
+            <span className="text-lg text-faint">/10</span>
+          </>
+        ) : (
+          <span className="text-faint">–</span>
+        )}
+        {stats.averageRating != null && <RatingMeter value={stats.averageRating} />}
+      </KpiTile>
+
+      <KpiTile icon={Trophy} label="Completion" accent="text-success">
+        <CountUp value={completionRate} />
+        <span className="text-lg text-faint">%</span>
+        <div className="mt-3 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+          <m.div
+            className="h-full rounded-full bg-success origin-left"
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: completionRate / 100 }}
+            transition={{ duration: 0.9, ease, delay: 0.2 }}
+          />
         </div>
+      </KpiTile>
 
-        {/* Critical Score */}
-        <div className="bg-white border-2 border-ink/10 p-5">
-          <span className="inline-block bg-movie text-white font-mono text-[10px] uppercase px-2 py-0.5 mb-3">
-            Quality
-          </span>
-          {stats.averageRating ? (
-            <>
-              <div className="flex gap-0.5 mb-1">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <span key={i} className={i <= filledStars ? 'text-movie' : 'text-ink/15'}>
-                    ★
+      <KpiTile icon={Play} label="In Progress" accent="text-cyan">
+        <CountUp value={statusCount('IN_PROGRESS')} />
+      </KpiTile>
+
+      {/* ---------- Type breakdown ---------- */}
+      <m.section variants={tile} className="panel p-5 sm:p-6 col-span-2">
+        <h2 className="hud-label text-muted mb-5">By Type</h2>
+        <div className="space-y-4">
+          {TYPE_KEYS.map((key, i) => {
+            const meta = TYPES[key];
+            const Icon = meta.icon;
+            const count = typeCount(key);
+            return (
+              <div key={key} title={`${meta.label}: ${count} (${Math.round(pct(count))}%)`}>
+                <div className="flex items-center justify-between text-sm mb-1.5">
+                  <span className="flex items-center gap-2 font-medium">
+                    <Icon size={15} className={meta.text} />
+                    {meta.label}
                   </span>
-                ))}
-              </div>
-              <p className="font-display text-3xl text-ink">
-                {stats.averageRating.toFixed(1)}<span className="text-lg text-ink/40">/10</span>
-              </p>
-            </>
-          ) : (
-            <p className="font-mono text-sm text-ink/40 mt-2">No ratings yet</p>
-          )}
-          <p className="font-mono text-xs text-ink/50 mt-2">Weighted curator average.</p>
-        </div>
-
-        {/* Type Breakdown */}
-        <div className="bg-white border-2 border-ink/10 p-5">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-ink/50 mb-3">
-            Type Breakdown
-          </p>
-          <div className="space-y-2">
-            {typeEntries.map(({ type, count }) => {
-              const pct = stats.totalEntries > 0 ? Math.round((count / stats.totalEntries) * 100) : 0;
-              return (
-                <div key={type}>
-                  <div className="flex justify-between font-mono text-xs text-ink/60 mb-0.5">
-                    <span>{type}</span>
-                    <span>{pct}%</span>
-                  </div>
-                  <div className="h-1.5 bg-ink/5 w-full">
-                    <div className={`h-full ${TYPE_COLORS[type]}`} style={{ width: `${pct}%` }} />
-                  </div>
+                  <span className="text-muted tabular-nums">
+                    <span className="text-fg font-semibold">{count}</span> · {Math.round(pct(count))}%
+                  </span>
                 </div>
-              );
-            })}
-          </div>
+                <div className="h-2 rounded-full bg-white/[0.05] overflow-hidden">
+                  {/* scaleX (not width) so the bar animates on the compositor */}
+                  <m.div
+                    className={`h-full rounded-full origin-left ${meta.bg}`}
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: count / maxType }}
+                    transition={{ duration: 0.8, ease, delay: 0.15 + i * 0.07 }}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
+      </m.section>
 
-        {/* Status Breakdown - replaces the mockup's Verified
-            Viewings/Queue Depth boxes with real, honestly-labeled data */}
-        <div className="bg-white border-2 border-ink/10 p-5 md:col-span-2">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-ink/50 mb-4">
-            Status Breakdown
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {statusEntries.map(({ status, label, count }) => (
-              <div key={status}>
-                <p className="font-display text-3xl text-ink">{count}</p>
-                <p className="font-mono text-xs text-ink/50 mt-1">{label}</p>
+      {/* ---------- Status breakdown ---------- */}
+      <m.section variants={tile} className="panel p-5 sm:p-6 col-span-2">
+        <h2 className="hud-label text-muted mb-5">By Status</h2>
+        {/* Stacked bar: segments separated by a 2px gap */}
+        <div className="flex h-3 gap-0.5 rounded-full overflow-hidden bg-white/[0.05]">
+          {STATUS_KEYS.map((key, i) => {
+            const count = statusCount(key);
+            if (count === 0) return null;
+            return (
+              <m.div
+                key={key}
+                title={`${STATUSES[key].label}: ${count}`}
+                className={`h-full origin-left ${STATUSES[key].dot}`}
+                style={{ flexGrow: count }}
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ duration: 0.6, ease, delay: 0.2 + i * 0.08 }}
+              />
+            );
+          })}
+        </div>
+        <div className="grid grid-cols-2 gap-3 mt-6">
+          {STATUS_KEYS.map((key) => {
+            const meta = STATUSES[key];
+            const Icon = meta.icon;
+            return (
+              <div key={key} className="flex items-center gap-3 rounded-lg bg-void/50 border border-white/[0.05] p-3">
+                <div className={`size-9 grid place-items-center rounded-lg bg-white/[0.04] ${meta.text}`}>
+                  <Icon size={16} />
+                </div>
+                <div>
+                  <p className="font-display text-xl font-bold leading-none tabular-nums">{statusCount(key)}</p>
+                  <p className="text-xs text-muted mt-1">{meta.label}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </m.section>
+
+      {/* ---------- Recently added ---------- */}
+      <m.section variants={tile} className="panel p-5 sm:p-6 col-span-2 lg:col-span-4">
+        <h2 className="hud-label text-muted mb-5 flex items-center gap-2">
+          <Clock size={13} /> Recently Added
+        </h2>
+        {recent.length === 0 ? (
+          <p className="text-sm text-faint">Nothing added yet.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {recent.map((entry) => (
+              <div key={entry.id} className="flex gap-3 rounded-lg bg-void/50 border border-white/[0.05] p-2.5">
+                <div className="w-14 aspect-[2/3] shrink-0 rounded-md overflow-hidden bg-raised">
+                  <Poster src={entry.mediaItem.imageUrl} type={entry.mediaItem.type} iconSize={20} />
+                </div>
+                <div className="min-w-0 flex flex-col justify-center gap-1.5">
+                  <p className="font-display font-semibold leading-tight line-clamp-2">{entry.mediaItem.title}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <TypeBadge type={entry.mediaItem.type} />
+                  </div>
+                  <StatusBadge status={entry.status} className="self-start px-0! bg-transparent!" />
+                </div>
               </div>
             ))}
           </div>
-        </div>
+        )}
+      </m.section>
+    </m.div>
+  );
+}
 
-        {/* Recently Added */}
-        <div className="bg-white border-2 border-ink/10 p-5">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-ink/50 mb-3">
-            Recently Added
-          </p>
-          {recentEntry ? (
-            <div className="flex gap-3">
-              <div className="w-16 h-24 bg-ink/5 flex-shrink-0 overflow-hidden">
-                {recentEntry.mediaItem.imageUrl && (
-                  <img
-                    src={recentEntry.mediaItem.imageUrl}
-                    alt={recentEntry.mediaItem.title}
-                    className="w-full h-full object-cover"
-                  />
-                )}
-              </div>
-              <div>
-                <p className="font-display text-lg text-ink leading-tight">
-                  {recentEntry.mediaItem.title}
-                </p>
-                <p className="font-mono text-xs text-ink/40 mt-1">
-                  {recentEntry.mediaItem.type}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <p className="font-mono text-xs text-ink/40">Nothing added yet.</p>
-          )}
-        </div>
+function KpiTile({ icon: Icon, label, accent, children }) {
+  return (
+    <m.div variants={tile} className="panel relative overflow-hidden p-5">
+      <div className="flex items-center justify-between">
+        <span className="hud-label text-muted">{label}</span>
+        <Icon size={16} className={accent} />
       </div>
+      <div className="font-display text-4xl font-bold mt-3">{children}</div>
+    </m.div>
+  );
+}
+
+function RatingMeter({ value }) {
+  return (
+    <div className="flex gap-0.5 mt-3" aria-hidden="true">
+      {Array.from({ length: 10 }, (_, i) => (
+        <m.span
+          key={i}
+          className={`h-1.5 flex-1 -skew-x-12 rounded-[1px] ${i < Math.round(value) ? 'bg-movie' : 'bg-white/[0.07]'}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 + i * 0.04 }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function StatsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {Array.from({ length: 4 }, (_, i) => (
+        <div key={i} className="skeleton h-32 rounded-xl" />
+      ))}
+      <div className="skeleton h-64 rounded-xl col-span-2" />
+      <div className="skeleton h-64 rounded-xl col-span-2" />
     </div>
   );
 }
